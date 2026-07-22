@@ -1,0 +1,43 @@
+# Managed by `a-novel repo update` — edit the template in stack, not this copy.
+#
+# Human-triggered Epic RELEASE TRAIN (a-novel-kit/workflows#236) — one dispatch releases every repo a
+# landed Epic touched. It reconstructs the `epic:<N>` merged repo set, derives each repo's semver bump
+# from its commit history, and drives each repo's own release.yaml (rehearse dry, then cut), recording
+# the released tag per repo as a receipt on the Epic. It is idempotent: a re-dispatch resumes, releasing
+# only the repos that haven't shipped yet. Unlike epic-rollback this is a FORWARD op (it publishes, it
+# doesn't undo merged code), so it is fenced by the admin gate + a dry-run default + a choice-typed
+# dry_run (no typed confirmation). The heavy lifting + the admin gate live in the reusable release-train-run workflow (pinned below);
+# this thin caller only threads the org creds + dispatch inputs. dry_run defaults on: it rehearses the
+# whole train and cuts nothing until you set dry_run=false.
+name: release-train
+
+on:
+  workflow_dispatch:
+    inputs:
+      epic_number:
+        description: The Epic number N to release (numeric).
+        required: true
+        type: string
+      dry_run:
+        description: "true (default) = rehearse every repo, cut nothing; false = actually cut the releases."
+        required: false
+        default: "true"
+        # choice (not string): the UI + the dispatch API reject anything but these two values, so a
+        # fat-fingered "false " / "FALSE" can't silently cut real releases when the operator meant dry.
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+run-name: "🚂 release train epic:#${{ inputs.epic_number }} requested by @${{ github.actor }} (dry_run=${{ inputs.dry_run }})"
+
+jobs:
+  release-train:
+    uses: a-novel-kit/workflows/.github/workflows/release-train-run.yaml@v1.23.0
+    with:
+      client_id: ${{ vars.AGENT_BOT_CLIENT_ID }}
+      epic_number: ${{ inputs.epic_number }}
+      dry_run: ${{ inputs.dry_run }}
+      kill_switch: ${{ vars.AGENT_KILL_SWITCH }}
+    secrets:
+      app_private_key: ${{ secrets.AGENT_BOT_PRIVATE_KEY }}
