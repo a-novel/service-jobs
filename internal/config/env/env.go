@@ -10,9 +10,9 @@ import (
 )
 
 // prefix is prepended to every configuration variable name that this package reads.
-// Set SERVICE_TEMPLATE_ENV_PREFIX when embedding the service in another project,
+// Set SERVICE_JOBS_ENV_PREFIX when embedding the service in another project,
 // where unprefixed variable names could collide with the host project's own.
-var prefix = os.Getenv("SERVICE_TEMPLATE_ENV_PREFIX")
+var prefix = os.Getenv("SERVICE_JOBS_ENV_PREFIX")
 
 func getEnv(name string) string {
 	return os.Getenv(prefix + name)
@@ -20,20 +20,10 @@ func getEnv(name string) string {
 
 // Default values applied when an environment variable is unset.
 const (
-	AppNameDefault = "service-template"
+	AppNameDefault = "service-jobs"
 
 	GrpcPortDefault = 8080
 	GrpcDefaultPing = time.Second * 5
-
-	RestPortDefault              = 8080
-	RestTimeoutReadDefault       = 15 * time.Second
-	RestTimeoutReadHeaderDefault = 3 * time.Second
-	RestTimeoutWriteDefault      = 30 * time.Second
-	RestTimeoutIdleDefault       = 60 * time.Second
-	RestTimeoutRequestDefault    = 60 * time.Second
-	RestMaxRequestSizeDefault    = 2 << 20 // 2 MiB
-	CorsAllowCredentialsDefault  = false
-	CorsMaxAgeDefault            = 3600
 
 	// PostgresMaxOpenConnsDefault keeps the pool well under a stock PostgreSQL
 	// max_connections of 100 once multiplied by a service's replica count, leaving
@@ -44,12 +34,6 @@ const (
 	// PostgresMaxIdleConnsDefault matches the open limit so a burst does not close
 	// connections it is about to reopen.
 	PostgresMaxIdleConnsDefault = 20
-)
-
-// Default values applied when an environment variable is unset.
-var (
-	CorsAllowedOriginsDefault = []string{"*"}
-	CorsAllowedHeadersDefault = []string{"*"}
 )
 
 // Raw values for environment variables.
@@ -64,19 +48,6 @@ var (
 	grpcPort = getEnv("GRPC_PORT")
 	grpcUrl  = getEnv("GRPC_URL")
 	grpcPing = getEnv("GRPC_PING")
-
-	restPort              = getEnv("REST_PORT")
-	restTimeoutRead       = getEnv("REST_TIMEOUT_READ")
-	restTimeoutReadHeader = getEnv("REST_TIMEOUT_READ_HEADER")
-	restTimeoutWrite      = getEnv("REST_TIMEOUT_WRITE")
-	restTimeoutIdle       = getEnv("REST_TIMEOUT_IDLE")
-	restTimeoutRequest    = getEnv("REST_TIMEOUT_REQUEST")
-	restMaxRequestSize    = getEnv("REST_MAX_REQUEST_SIZE")
-
-	corsAllowedOrigins   = getEnv("REST_CORS_ALLOWED_ORIGINS")
-	corsAllowedHeaders   = getEnv("REST_CORS_ALLOWED_HEADERS")
-	corsAllowCredentials = getEnv("REST_CORS_ALLOW_CREDENTIALS")
-	corsMaxAge           = getEnv("REST_CORS_MAX_AGE")
 
 	gcloudProjectId = getEnv("GCLOUD_PROJECT_ID")
 )
@@ -105,34 +76,6 @@ var (
 	GrpcUrl = grpcUrl
 	// GrpcPing is the refresh interval for the gRPC server's internal health check.
 	GrpcPing = config.LoadEnv(grpcPing, GrpcDefaultPing, config.DurationParser)
-
-	// RestPort is the port on which the REST server listens for incoming requests.
-	RestPort = config.LoadEnv(restPort, RestPortDefault, config.IntParser)
-	// RestTimeoutRead is the maximum duration for reading an incoming REST request.
-	RestTimeoutRead = config.LoadEnv(restTimeoutRead, RestTimeoutReadDefault, config.DurationParser)
-	// RestTimeoutReadHeader is the maximum duration for reading the headers of an incoming REST request.
-	RestTimeoutReadHeader = config.LoadEnv(restTimeoutReadHeader, RestTimeoutReadHeaderDefault, config.DurationParser)
-	// RestTimeoutWrite is the maximum duration for writing a REST response.
-	RestTimeoutWrite = config.LoadEnv(restTimeoutWrite, RestTimeoutWriteDefault, config.DurationParser)
-	// RestTimeoutIdle is the maximum duration to wait for the next request when keep-alives are enabled.
-	RestTimeoutIdle = config.LoadEnv(restTimeoutIdle, RestTimeoutIdleDefault, config.DurationParser)
-	// RestTimeoutRequest is the maximum duration for processing an incoming REST request.
-	RestTimeoutRequest = config.LoadEnv(restTimeoutRequest, RestTimeoutRequestDefault, config.DurationParser)
-	// RestMaxRequestSize is the maximum size of an incoming REST request body.
-	RestMaxRequestSize = config.LoadEnv(restMaxRequestSize, RestMaxRequestSizeDefault, config.Int64Parser)
-
-	// CorsAllowedOrigins lists the origins allowed to access the REST API.
-	CorsAllowedOrigins = config.LoadEnv(
-		corsAllowedOrigins, CorsAllowedOriginsDefault, config.SliceParser(config.StringParser),
-	)
-	// CorsAllowedHeaders lists the headers allowed in CORS requests.
-	CorsAllowedHeaders = config.LoadEnv(
-		corsAllowedHeaders, CorsAllowedHeadersDefault, config.SliceParser(config.StringParser),
-	)
-	// CorsAllowCredentials configures whether CORS requests can include credentials.
-	CorsAllowCredentials = config.LoadEnv(corsAllowCredentials, CorsAllowCredentialsDefault, config.BoolParser)
-	// CorsMaxAge sets the maximum age (in seconds) for CORS preflight cache.
-	CorsMaxAge = config.LoadEnv(corsMaxAge, CorsMaxAgeDefault, config.IntParser)
 
 	// GcloudProjectId names the Google Cloud project the service runs in. Setting
 	// it switches logging and tracing from the local console to Google Cloud.

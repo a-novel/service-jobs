@@ -1,29 +1,37 @@
-# Contributing to service-template
+# Contributing to service-jobs
 
-This file covers only what is specific to the **template**. For service-level contribution shared across every service — the architecture, the layers, the conventions — start with the [service & architecture concepts](https://github.com/a-novel/.github/blob/master/CONTRIBUTING.md). Platform setup and day-to-day commands are in the [developer onboarding guide](https://github.com/a-novel-kit/.github/blob/master/README.md).
+This file covers only what is specific to this service. For contribution conventions shared across every service — the architecture, the layers, the naming — start with the [service & architecture concepts](https://github.com/a-novel/.github/blob/master/CONTRIBUTING.md). Platform setup and day-to-day commands are in the [developer onboarding guide](https://github.com/a-novel-kit/.github/blob/master/README.md). What the service is for is in the [README](./README.md).
 
-`service-template` is a fork target: a dummy `item` resource implements the common service contracts end to end, with no real feature of its own. How to fork it — and where every `item` file lives — is in the [README](./README.md#using-this-template).
+---
+
+## The service is gRPC only
+
+There is no REST server, no `openapi.yaml`, and no JavaScript client. Callers are other services on the internal network, so a second transport would be a second contract to keep in step with no consumer asking for it.
+
+Two consequences worth knowing before you add a file:
+
+- The container's liveness check is `grpc.health.v1.Health/Check`, not an HTTP `/ping`. A gRPC service exposes its health through the standard health protocol, so nothing here needs an HTTP listener.
+- `prettier` is still installed and still runs in CI. It formats `.sql` and `.yaml`, so the migrations and the workflows are covered by `pnpm format` and gated by `pnpm lint:js` — the JavaScript toolchain survives the removal of the JavaScript client.
+
+The `Item*Service` RPCs are placeholder wiring inherited from the service template, not a feature. Their shapes live in [`internal/models/proto/`](./internal/models/proto/), and the queue replaces them rather than growing alongside them.
 
 ---
 
 ## Running it locally
 
-Start a server and load its ports into your shell:
+Start the server and load its ports into your shell:
 
 ```bash
-a-novel run start service-template/rest   # and/or service-template/grpc
-eval "$(a-novel run env service-template)"
+a-novel run start service-jobs/grpc
+eval "$(a-novel run env service-jobs)"
 ```
 
 Check it is alive:
 
 ```bash
-curl http://localhost:${SERVICE_TEMPLATE_REST_PORT}/ping          # REST liveness
-curl http://localhost:${SERVICE_TEMPLATE_REST_PORT}/healthcheck   # REST: Postgres dependency
-grpcurl -plaintext localhost:${SERVICE_TEMPLATE_GRPC_PORT} StatusService/Status   # gRPC dependency
+grpcurl -plaintext localhost:${SERVICE_JOBS_GRPC_PORT} list
+grpcurl -plaintext localhost:${SERVICE_JOBS_GRPC_PORT} StatusService/Status
 ```
-
-The `item` CRUD routes (`/items`, `/item`, the `Item*Service` RPCs) are placeholder wiring to fork, not a feature; their request/response shapes live in [`openapi.yaml`](./openapi.yaml) and [`internal/models/proto/`](./internal/models/proto/).
 
 ---
 
@@ -61,4 +69,4 @@ Unit-test a service that takes a transactor with `transactiontest.NewTransactor`
 
 ## Questions?
 
-[Open an issue](https://github.com/a-novel/service-template/issues) — include logs and environment details.
+[Open an issue](https://github.com/a-novel/service-jobs/issues) — include logs and environment details.

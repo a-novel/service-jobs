@@ -24,7 +24,7 @@ services:
   # ONE-SHOT TARGETS
   # ====================================================================================================================
 
-  service-template-migrations:
+  service-jobs-migrations:
     profiles: ["migrations"]
     build:
       context: ..
@@ -41,7 +41,7 @@ services:
   # LONG-RUNNER TARGETS
   # ====================================================================================================================
 
-  service-template-grpc:
+  service-jobs-grpc:
     profiles: ["grpc"]
     build:
       context: ..
@@ -51,24 +51,7 @@ services:
     depends_on:
       postgres-template:
         condition: service_healthy
-      service-template-migrations:
-        condition: service_completed_successfully
-    environment:
-      POSTGRES_DSN: postgres://postgres:postgres@postgres-template:5432/postgres?sslmode=disable
-    networks:
-      - api
-
-  service-template-rest:
-    profiles: ["rest"]
-    build:
-      context: ..
-      dockerfile: ./builds/standalone.rest.Dockerfile
-    ports:
-      - "${REST_PORT}:8080"
-    depends_on:
-      postgres-template:
-        condition: service_healthy
-      service-template-migrations:
+      service-jobs-migrations:
         condition: service_completed_successfully
     environment:
       POSTGRES_DSN: postgres://postgres:postgres@postgres-template:5432/postgres?sslmode=disable

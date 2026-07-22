@@ -10,8 +10,8 @@ import (
 
 	"github.com/a-novel-kit/golib/postgres"
 
-	"github.com/a-novel/service-template/internal/config"
-	"github.com/a-novel/service-template/internal/models/migrations"
+	"github.com/a-novel/service-jobs/internal/config"
+	"github.com/a-novel/service-jobs/internal/models/migrations"
 )
 
 func main() {

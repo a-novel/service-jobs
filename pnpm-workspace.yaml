@@ -1,7 +1,3 @@
-packages:
-  - pkg/js/rest
-  - pkg/js/test/rest
-
 allowBuilds:
   core-js: true
   esbuild: true

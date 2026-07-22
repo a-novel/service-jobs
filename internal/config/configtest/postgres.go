@@ -7,7 +7,7 @@ import (
 
 	postgrespresets "github.com/a-novel-kit/golib/postgres/presets"
 
-	"github.com/a-novel/service-template/internal/config/env"
+	"github.com/a-novel/service-jobs/internal/config/env"
 )
 
 // PostgresPreset is the PostgreSQL configuration shared by integration tests,

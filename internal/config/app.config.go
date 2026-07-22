@@ -11,14 +11,6 @@ import (
 	"github.com/a-novel-kit/golib/postgres"
 )
 
-// RestCors holds CORS configuration for the REST server.
-type RestCors struct {
-	AllowedOrigins   []string `json:"allowedOrigins"   yaml:"allowedOrigins"`
-	AllowedHeaders   []string `json:"allowedHeaders"   yaml:"allowedHeaders"`
-	AllowCredentials bool     `json:"allowCredentials" yaml:"allowCredentials"`
-	MaxAge           int      `json:"maxAge"           yaml:"maxAge"`
-}
-
 // Main holds the top-level application settings.
 type Main struct {
 	// Name of the application, as it appears in logs and tracing.
@@ -33,37 +25,13 @@ type Grpc struct {
 	Ping time.Duration `json:"ping" yaml:"ping"`
 }
 
-// RestTimeouts holds timeout configuration for the REST server.
-type RestTimeouts struct {
-	Read       time.Duration `json:"read"       yaml:"read"`
-	ReadHeader time.Duration `json:"readHeader" yaml:"readHeader"`
-	Write      time.Duration `json:"write"      yaml:"write"`
-	Idle       time.Duration `json:"idle"       yaml:"idle"`
-	Request    time.Duration `json:"request"    yaml:"request"`
-}
-
-// Rest holds the REST server configuration.
-type Rest struct {
-	// Port on which the REST server listens for incoming requests.
-	Port int `json:"port" yaml:"port"`
-	// Timeouts bounds the lifecycle of a REST request.
-	Timeouts RestTimeouts `json:"timeouts" yaml:"timeouts"`
-	// MaxRequestSize is the maximum size of an incoming request body, in bytes.
-	MaxRequestSize int64 `json:"maxRequestSize" yaml:"maxRequestSize"`
-	// Cors holds the CORS configuration.
-	Cors RestCors `json:"cors" yaml:"cors"`
-}
-
 // App is the complete configuration consumed by the service at startup, grouping
 // the server, observability, logging, and database settings.
 type App struct {
 	App  Main `json:"app"  yaml:"app"`
 	Grpc Grpc `json:"grpc" yaml:"grpc"`
-	Rest Rest `json:"rest" yaml:"rest"`
 
-	Otel       otel.Config        `json:"otel"       yaml:"otel"`
-	Log        logging.Log        `json:"log"        yaml:"log"`
-	Logger     logging.RPCConfig  `json:"logger"     yaml:"logger"`
-	HttpLogger logging.HTTPConfig `json:"httpLogger" yaml:"httpLogger"`
-	Postgres   postgres.Config    `json:"postgres"   yaml:"postgres"`
+	Otel     otel.Config       `json:"otel"     yaml:"otel"`
+	Logger   logging.RPCConfig `json:"logger"   yaml:"logger"`
+	Postgres postgres.Config   `json:"postgres" yaml:"postgres"`
 }

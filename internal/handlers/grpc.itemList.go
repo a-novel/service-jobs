@@ -9,8 +9,8 @@ import (
 
 	"github.com/a-novel-kit/golib/otel"
 
-	"github.com/a-novel/service-template/internal/core"
-	"github.com/a-novel/service-template/internal/handlers/protogen"
+	"github.com/a-novel/service-jobs/internal/core"
+	"github.com/a-novel/service-jobs/internal/handlers/protogen"
 )
 
 // ItemListService returns a page of items bounded by the request's limit and

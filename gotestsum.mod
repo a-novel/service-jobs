@@ -1,4 +1,4 @@
-module github.com/a-novel/service-template/gotestsum
+module github.com/a-novel/service-jobs/gotestsum
 
 go 1.26.5
 
