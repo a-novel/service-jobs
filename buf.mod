@@ -1,4 +1,4 @@
-module github.com/a-novel/service-template/buf
+module github.com/a-novel/service-jobs/buf
 
 go 1.26.5
 

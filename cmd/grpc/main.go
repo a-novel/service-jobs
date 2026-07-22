@@ -22,12 +22,12 @@ import (
 	"github.com/a-novel-kit/golib/otel"
 	"github.com/a-novel-kit/golib/postgres"
 
-	"github.com/a-novel/service-template/internal/config"
-	"github.com/a-novel/service-template/internal/config/env"
-	"github.com/a-novel/service-template/internal/core"
-	"github.com/a-novel/service-template/internal/dao"
-	"github.com/a-novel/service-template/internal/handlers"
-	"github.com/a-novel/service-template/internal/handlers/protogen"
+	"github.com/a-novel/service-jobs/internal/config"
+	"github.com/a-novel/service-jobs/internal/config/env"
+	"github.com/a-novel/service-jobs/internal/core"
+	"github.com/a-novel/service-jobs/internal/dao"
+	"github.com/a-novel/service-jobs/internal/handlers"
+	"github.com/a-novel/service-jobs/internal/handlers/protogen"
 )
 
 func main() {

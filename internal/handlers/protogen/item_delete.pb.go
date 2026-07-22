@@ -123,7 +123,7 @@ const file_item_delete_proto_rawDesc = "" +
 	"\x04item\x18\x01 \x01(\v2\x05.ItemR\x04item2J\n" +
 	"\x11ItemDeleteService\x125\n" +
 	"\n" +
-	"ItemDelete\x12\x12.ItemDeleteRequest\x1a\x13.ItemDeleteResponseB\\B\x0fItemDeleteProtoP\x01ZGgithub.com/a-novel/service-template/internal/handlers/protogen;protogenb\x06proto3"
+	"ItemDelete\x12\x12.ItemDeleteRequest\x1a\x13.ItemDeleteResponseBXB\x0fItemDeleteProtoP\x01ZCgithub.com/a-novel/service-jobs/internal/handlers/protogen;protogenb\x06proto3"
 
 var (
 	file_item_delete_proto_rawDescOnce sync.Once

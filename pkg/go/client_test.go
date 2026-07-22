@@ -9,8 +9,8 @@ import (
 
 	golibproto "github.com/a-novel-kit/golib/grpcf/proto/gen"
 
-	"github.com/a-novel/service-template/internal/config/env"
-	"github.com/a-novel/service-template/pkg/go"
+	"github.com/a-novel/service-jobs/internal/config/env"
+	"github.com/a-novel/service-jobs/pkg/go"
 )
 
 func TestClient(t *testing.T) {

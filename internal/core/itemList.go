@@ -9,7 +9,7 @@ import (
 
 	"github.com/a-novel-kit/golib/otel"
 
-	"github.com/a-novel/service-template/internal/dao"
+	"github.com/a-novel/service-jobs/internal/dao"
 )
 
 // ItemListDao is the persistence dependency ItemList uses to read a page of items.

@@ -11,7 +11,7 @@ import (
 
 	"github.com/a-novel-kit/golib/otel"
 
-	"github.com/a-novel/service-template/internal/dao"
+	"github.com/a-novel/service-jobs/internal/dao"
 )
 
 // ItemUpdateDao is the persistence dependency ItemUpdate uses to write an item's new values.

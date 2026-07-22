@@ -9,7 +9,7 @@ import (
 	"github.com/a-novel-kit/golib/otel"
 	"github.com/a-novel-kit/golib/postgres"
 
-	"github.com/a-novel/service-template/internal/handlers/protogen"
+	"github.com/a-novel/service-jobs/internal/handlers/protogen"
 )
 
 // NewGrpcHealthStatus converts an error into a DependencyHealth proto message,

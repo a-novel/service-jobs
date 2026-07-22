@@ -96,7 +96,7 @@ jobs:
       id-token: write
     services:
       postgres-template:
-        image: ghcr.io/a-novel/service-template/database:${{ needs.release.outputs.tag }}
+        image: ghcr.io/a-novel/service-jobs/database:${{ needs.release.outputs.tag }}
         ports:
           - "5432:5432"
         env:
@@ -132,7 +132,7 @@ jobs:
       id-token: write
     services:
       postgres-template:
-        image: ghcr.io/a-novel/service-template/database:${{ needs.release.outputs.tag }}
+        image: ghcr.io/a-novel/service-jobs/database:${{ needs.release.outputs.tag }}
         ports:
           - "5432:5432"
         env:
@@ -170,7 +170,7 @@ jobs:
       id-token: write
     services:
       postgres-template:
-        image: ghcr.io/a-novel/service-template/database:${{ needs.release.outputs.tag }}
+        image: ghcr.io/a-novel/service-jobs/database:${{ needs.release.outputs.tag }}
         ports:
           - "5432:5432"
         env:
@@ -197,84 +197,6 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           run_args: -e POSTGRES_DSN="${POSTGRES_DSN}"
 
-  build-rest:
-    needs: [release, build-database]
-    if: ${{ !inputs.dry_run }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-      attestations: write
-      id-token: write
-    services:
-      postgres-template:
-        image: ghcr.io/a-novel/service-template/database:${{ needs.release.outputs.tag }}
-        ports:
-          - "5432:5432"
-        env:
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_USER: postgres
-          POSTGRES_DB: postgres
-          POSTGRES_HOST_AUTH_METHOD: scram-sha-256
-          POSTGRES_INITDB_ARGS: --auth=scram-sha-256
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    env:
-      POSTGRES_DSN: postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
-    steps:
-      - uses: actions/checkout@v7
-      - uses: ./.github/actions/run-migrations
-      - uses: a-novel-kit/workflows/build-actions/docker@v1.23.0
-        with:
-          file: builds/rest.Dockerfile
-          image_name: ${{ github.repository }}/rest
-          version: ${{ needs.release.outputs.version }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          run_args: -e POSTGRES_DSN="${POSTGRES_DSN}"
-
-  build-standalone-rest:
-    needs: [release, build-database]
-    if: ${{ !inputs.dry_run }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-      attestations: write
-      id-token: write
-    services:
-      postgres-template:
-        image: ghcr.io/a-novel/service-template/database:${{ needs.release.outputs.tag }}
-        ports:
-          - "5432:5432"
-        env:
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_USER: postgres
-          POSTGRES_DB: postgres
-          POSTGRES_HOST_AUTH_METHOD: scram-sha-256
-          POSTGRES_INITDB_ARGS: --auth=scram-sha-256
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    env:
-      POSTGRES_DSN: postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
-    steps:
-      - uses: actions/checkout@v7
-      - uses: ./.github/actions/run-migrations
-      - uses: a-novel-kit/workflows/build-actions/docker@v1.23.0
-        with:
-          file: builds/standalone.rest.Dockerfile
-          image_name: ${{ github.repository }}/standalone-rest
-          version: ${{ needs.release.outputs.version }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          run_args: -e POSTGRES_DSN="${POSTGRES_DSN}"
-
-  # Publish the JS client from the bumped tag (ref): the dispatch runs on master, which is
-  # still pre-bump.
   build-js:
     needs: [release]
     if: ${{ !inputs.dry_run }}
@@ -298,8 +220,6 @@ jobs:
       - build-migrations
       - build-grpc
       - build-standalone-grpc
-      - build-rest
-      - build-standalone-rest
       - build-js
     if: ${{ !inputs.dry_run }}
     runs-on: ubuntu-latest

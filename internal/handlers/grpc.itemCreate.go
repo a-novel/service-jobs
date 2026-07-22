@@ -10,8 +10,8 @@ import (
 
 	"github.com/a-novel-kit/golib/otel"
 
-	"github.com/a-novel/service-template/internal/core"
-	"github.com/a-novel/service-template/internal/handlers/protogen"
+	"github.com/a-novel/service-jobs/internal/core"
+	"github.com/a-novel/service-jobs/internal/handlers/protogen"
 )
 
 // ItemCreateService creates an item from the request and returns the stored
