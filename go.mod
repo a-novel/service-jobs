@@ -3,7 +3,7 @@ module github.com/a-novel/service-jobs
 go 1.26.5
 
 require (
-	github.com/a-novel-kit/golib v0.26.0
+	github.com/a-novel-kit/golib v0.28.0
 	github.com/go-playground/validator/v10 v10.30.3
 	github.com/google/uuid v1.6.0
 	github.com/samber/lo v1.53.0
