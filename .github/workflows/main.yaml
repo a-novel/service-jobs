@@ -91,6 +91,40 @@ jobs:
           coverage_file: coverage.txt
           modfile: gotestsum.mod
 
+  # Runs the reaper's reap-latency benchmark and prints the numbers to the job log. It is
+  # informational, not a pass/fail performance gate: benchmark timing on shared runners is too noisy
+  # to threshold, so this only keeps the benchmark runnable and surfaces the figures the README cites.
+  benchmark-go:
+    needs: [lint-go, build-database]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: ghcr.io/a-novel/service-jobs/database@${{ needs.build-database.outputs.digest }}
+        ports:
+          - "5432:5432"
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: postgres
+          POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+          POSTGRES_INITDB_ARGS: --auth=scram-sha-256
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      POSTGRES_DSN: postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: "go.mod"
+      - name: reap latency benchmark
+        run: go test -bench=BenchmarkJobReap -benchmem -benchtime=20x -run='^$' ./internal/dao/...
+
   test-pkg:
     needs: [build-database, build-standalone-grpc]
     runs-on: ubuntu-latest
