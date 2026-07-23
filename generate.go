@@ -1,4 +1,4 @@
-package authentication
+package servicejobs
 
 // Generate proto stubs first (mockery depends on compiled packages).
 //go:generate rm -rf internal/handlers/protogen
