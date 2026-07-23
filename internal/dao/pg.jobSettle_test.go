@@ -20,96 +20,112 @@ func TestJobSettle(t *testing.T) {
 
 	id := uuid.MustParse(fixtureJobID)
 
-	t.Run("Succeeded", func(t *testing.T) {
-		t.Parallel()
+	testCases := []struct {
+		name string
 
-		postgres.RunDBTest(t, configtest.PostgresPreset, migrations.Migrations, func(ctx context.Context, t *testing.T) {
-			t.Helper()
+		// settleWorker is the worker that settles. It matches the claim on the success paths and
+		// differs to exercise the guard.
+		settleWorker string
+		status       dao.JobStatus
+		result       json.RawMessage
+		jobErr       json.RawMessage
 
-			claimJob(ctx, t, 1, 60)
+		// preSettle, when set, settles the job once before the case's own settle, so the second one
+		// finds nothing still claimed.
+		preSettle bool
 
-			settled, err := dao.NewJobSettle().Exec(ctx, &dao.JobSettleRequest{
-				ID:            id,
-				WorkerID:      fixtureWorkerID,
-				Status:        dao.JobStatusSucceeded,
-				Result:        json.RawMessage(`{"ok":true}`),
-				RetentionDays: 7,
+		expectStatus dao.JobStatus
+		expectResult json.RawMessage
+		expectErr    error
+	}{
+		{
+			name: "Succeeded",
+
+			settleWorker: fixtureWorkerID,
+			status:       dao.JobStatusSucceeded,
+			result:       json.RawMessage(`{"ok":true}`),
+
+			expectStatus: dao.JobStatusSucceeded,
+			expectResult: json.RawMessage(`{"ok":true}`),
+		},
+		{
+			name: "Failed",
+
+			settleWorker: fixtureWorkerID,
+			status:       dao.JobStatusFailed,
+			jobErr:       json.RawMessage(`{"reason":"boom"}`),
+
+			expectStatus: dao.JobStatusFailed,
+		},
+		{
+			name: "Error/WrongWorker",
+
+			settleWorker: "worker-b",
+			status:       dao.JobStatusSucceeded,
+
+			expectErr: dao.ErrJobSettleNotClaimed,
+		},
+		{
+			name: "Error/AlreadySettled",
+
+			settleWorker: fixtureWorkerID,
+			status:       dao.JobStatusSucceeded,
+			preSettle:    true,
+
+			expectErr: dao.ErrJobSettleNotClaimed,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			postgres.RunDBTest(t, configtest.PostgresPreset, migrations.Migrations, func(ctx context.Context, t *testing.T) {
+				t.Helper()
+
+				claimJob(ctx, t, 1, 60)
+
+				settle := dao.NewJobSettle()
+
+				if testCase.preSettle {
+					_, err := settle.Exec(ctx, &dao.JobSettleRequest{
+						ID: id, WorkerID: fixtureWorkerID, Status: dao.JobStatusSucceeded, RetentionDays: 7,
+					})
+					require.NoError(t, err)
+				}
+
+				settled, err := settle.Exec(ctx, &dao.JobSettleRequest{
+					ID:            id,
+					WorkerID:      testCase.settleWorker,
+					Status:        testCase.status,
+					Result:        testCase.result,
+					Error:         testCase.jobErr,
+					RetentionDays: 7,
+				})
+				require.ErrorIs(t, err, testCase.expectErr)
+
+				if testCase.expectErr != nil {
+					require.Nil(t, settled)
+
+					return
+				}
+
+				require.Equal(t, testCase.expectStatus, settled.Status)
+				require.Nil(t, settled.ClaimedBy)
+				require.Nil(t, settled.LeaseExpiresAt)
+				// A terminal settle stamps both timestamps, which the retention purge later reads.
+				require.NotNil(t, settled.SettledAt)
+				require.NotNil(t, settled.ExpiresAt)
+				require.True(t, settled.ExpiresAt.After(*settled.SettledAt))
+
+				if testCase.expectResult != nil {
+					require.JSONEq(t, string(testCase.expectResult), string(settled.Result))
+				}
+
+				if testCase.jobErr != nil {
+					require.JSONEq(t, string(testCase.jobErr), string(settled.Error))
+				}
 			})
-			require.NoError(t, err)
-
-			require.Equal(t, dao.JobStatusSucceeded, settled.Status)
-			require.JSONEq(t, `{"ok":true}`, string(settled.Result))
-			require.Nil(t, settled.ClaimedBy)
-			require.Nil(t, settled.LeaseExpiresAt)
-			require.NotNil(t, settled.SettledAt)
-			require.NotNil(t, settled.ExpiresAt)
-			// The retention horizon is the settle time plus the requested window.
-			require.True(t, settled.ExpiresAt.After(*settled.SettledAt))
 		})
-	})
-
-	t.Run("Failed", func(t *testing.T) {
-		t.Parallel()
-
-		postgres.RunDBTest(t, configtest.PostgresPreset, migrations.Migrations, func(ctx context.Context, t *testing.T) {
-			t.Helper()
-
-			claimJob(ctx, t, 1, 60)
-
-			settled, err := dao.NewJobSettle().Exec(ctx, &dao.JobSettleRequest{
-				ID:            id,
-				WorkerID:      fixtureWorkerID,
-				Status:        dao.JobStatusFailed,
-				Error:         json.RawMessage(`{"reason":"boom"}`),
-				RetentionDays: 7,
-			})
-			require.NoError(t, err)
-
-			require.Equal(t, dao.JobStatusFailed, settled.Status)
-			require.JSONEq(t, `{"reason":"boom"}`, string(settled.Error))
-			require.NotNil(t, settled.SettledAt)
-		})
-	})
-
-	t.Run("Error/WrongWorker", func(t *testing.T) {
-		t.Parallel()
-
-		postgres.RunDBTest(t, configtest.PostgresPreset, migrations.Migrations, func(ctx context.Context, t *testing.T) {
-			t.Helper()
-
-			claimJob(ctx, t, 1, 60)
-
-			// Another worker cannot settle a job it does not hold: the guard matches nothing.
-			_, err := dao.NewJobSettle().Exec(ctx, &dao.JobSettleRequest{
-				ID:            id,
-				WorkerID:      "worker-b",
-				Status:        dao.JobStatusSucceeded,
-				RetentionDays: 7,
-			})
-			require.ErrorIs(t, err, dao.ErrJobSettleNotClaimed)
-		})
-	})
-
-	t.Run("Error/AlreadySettled", func(t *testing.T) {
-		t.Parallel()
-
-		postgres.RunDBTest(t, configtest.PostgresPreset, migrations.Migrations, func(ctx context.Context, t *testing.T) {
-			t.Helper()
-
-			claimJob(ctx, t, 1, 60)
-
-			settle := dao.NewJobSettle()
-
-			_, err := settle.Exec(ctx, &dao.JobSettleRequest{
-				ID: id, WorkerID: fixtureWorkerID, Status: dao.JobStatusSucceeded, RetentionDays: 7,
-			})
-			require.NoError(t, err)
-
-			// The job is no longer claimed, so a second settle finds nothing to move.
-			_, err = settle.Exec(ctx, &dao.JobSettleRequest{
-				ID: id, WorkerID: fixtureWorkerID, Status: dao.JobStatusSucceeded, RetentionDays: 7,
-			})
-			require.ErrorIs(t, err, dao.ErrJobSettleNotClaimed)
-		})
-	})
+	}
 }
