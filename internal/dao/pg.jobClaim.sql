@@ -9,22 +9,23 @@
 -- lease_expires_at is clock_timestamp() plus the visibility timeout, computed in the database so
 -- worker clock skew never enters lease arithmetic. Setting status and the lease together is what the
 -- jobs_lease_matches_status constraint requires.
-WITH claimable AS (
-  SELECT
-    id
-  FROM
-    jobs
-  WHERE
-    status = 'pending'
-    AND run_at <= clock_timestamp()
-    AND kind IN (?0)
-  ORDER BY
-    run_at
-  LIMIT
-    ?1
-  FOR UPDATE
-    SKIP LOCKED
-)
+WITH
+  claimable AS (
+    SELECT
+      id
+    FROM
+      jobs
+    WHERE
+      status = 'pending'
+      AND run_at <= clock_timestamp()
+      AND kind IN (?0)
+    ORDER BY
+      run_at
+    LIMIT
+      ?1
+    FOR UPDATE
+      SKIP LOCKED
+  )
 UPDATE jobs
 SET
   status = 'claimed',
