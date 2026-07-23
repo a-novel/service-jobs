@@ -102,22 +102,3 @@ func TestJobSettle(t *testing.T) {
 		})
 	}
 }
-
-func TestJobClaim(t *testing.T) {
-	t.Parallel()
-
-	service := handlersmocks.NewMockJobClaimService(t)
-	service.EXPECT().
-		Exec(mock.Anything, &core.JobClaimRequest{Kinds: []string{"generate"}, WorkerID: "w", Limit: 5, LeaseSeconds: 60}).
-		Return([]*core.Job{{ID: uuid.New()}, {ID: uuid.New()}}, nil)
-
-	handler := handlers.NewJobClaim(service)
-
-	resp, err := handler.JobClaim(t.Context(), &protogen.JobClaimRequest{
-		Kinds: []string{"generate"}, WorkerId: "w", Limit: 5, LeaseSeconds: 60,
-	})
-	require.NoError(t, err)
-	require.Len(t, resp.GetJobs(), 2)
-
-	service.AssertExpectations(t)
-}
