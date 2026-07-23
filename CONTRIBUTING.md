@@ -67,6 +67,41 @@ Unit-test a service that takes a transactor with `transactiontest.NewTransactor`
 
 ---
 
+## Schema conventions
+
+These hold for every new table. The scaffold `items` table predates them and is not the reference.
+
+**Identifiers are time-ordered and minted in Go.** Columns default to `uuidv7()`, which the project's PostgreSQL 18 image provides natively, so a table under insert churn keeps index locality instead of scattering writes across the whole B-tree. Core still generates the identifier and passes it in: an insert that has to read back a database-generated id cannot tell its own row from one a concurrent caller inserted under the same unique key.
+
+**Timestamps are full precision, and the database is the clock.** Declare `timestamptz`, never `timestamp(0)` — second precision cannot order two commits, let alone express a lease expiry. Default them to `clock_timestamp()`, never `now()` or `CURRENT_TIMESTAMP`: those two are frozen at transaction start, so a column written inside a transaction can never advance past a value its neighbors already hold. Several workers compare these timestamps, so the database has to be the single clock, or application-server skew enters the arithmetic.
+
+**Owned rows carry an `owner_id`, with no cross-service foreign key.** Identity belongs to another service, so there is nothing local to reference and no constraint to declare.
+
+**The value arrives from the caller, and that is a deliberate boundary.** This service authenticates nobody: it is internal and unreachable from outside, the same posture `service-json-keys` takes while serving private key material. The calling service verified its own user and is trusted to pass the right owner. What that buys, and what it does not:
+
+- The predicate **still** stops one user's row reaching another through a caller's own bug. A read that omits the owner returns no rows rather than somebody else's job, and that is the mistake a handler under time pressure actually makes.
+- It **no longer** defends against a compromised caller, which could pass any owner it liked. The network boundary owns that.
+
+**Ownership is a query predicate, not a check after the fact:**
+
+```sql
+SELECT
+  *
+FROM
+  jobs
+WHERE
+  id = ?0
+  AND owner_id = ?1;
+```
+
+A predicate is fail-closed: a caller that forgets the owner argument fails to scan rather than returning someone else's row, whereas a later `if row.OwnerID != actor.UserID` is one early return away from being skipped. It also collapses "no such row" and "not your row" into one no-rows result, which removes an existence oracle over a priced resource at no cost.
+
+**A cross-owner read is not-found, never access-denied.** The data-access object joins `sql.ErrNoRows` onto its own sentinel, and the handler maps that to `NOT_FOUND`. Answering `PERMISSION_DENIED` would confirm the row exists.
+
+**Every migration gets its own deliberately allocated prefix.** Take it from `date '+%Y%m%d%H%M%S'` at the moment you create the file. bun derives a migration's identity from that numeric prefix alone, so two files sharing one merge into a single migration: the second replaces the first, with no error at discovery and none at apply, and the first migration simply never runs. An `.up.sql` and its `.down.sql` are meant to share a prefix; two different migrations are not.
+
+---
+
 ## Questions?
 
 [Open an issue](https://github.com/a-novel/service-jobs/issues) — include logs and environment details.
