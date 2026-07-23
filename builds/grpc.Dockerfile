@@ -26,6 +26,7 @@ COPY ./internal/dao ./internal/dao
 COPY ./internal/core ./internal/core
 COPY ./internal/models ./internal/models
 COPY ./internal/config ./internal/config
+COPY ./internal/lib ./internal/lib
 
 # -ldflags="-s -w" strips the symbol table and DWARF for a smaller binary; -trimpath
 # drops absolute paths.

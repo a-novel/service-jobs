@@ -3,11 +3,17 @@
 package env
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"time"
 
 	"github.com/a-novel-kit/golib/config"
 )
+
+// errReaperIntervalNonPositive is returned when REAPER_INTERVAL parses but is zero or negative — a
+// value that is syntactically a duration yet cannot be a sweep cadence.
+var errReaperIntervalNonPositive = errors.New("REAPER_INTERVAL must be positive")
 
 // prefix is prepended to every configuration variable name that this package reads.
 // Set SERVICE_JOBS_ENV_PREFIX when embedding the service in another project,
@@ -24,6 +30,11 @@ const (
 
 	GrpcPortDefault = 8080
 	GrpcDefaultPing = time.Second * 5
+
+	// ReaperIntervalDefault is the sweep cadence used when REAPER_INTERVAL is unset. It is short
+	// relative to a typical lease, so a job a dead worker stranded is recovered within one interval
+	// of its lease lapsing, while an idle queue costs only an index probe per sweep.
+	ReaperIntervalDefault = time.Second * 30
 
 	// PostgresMaxOpenConnsDefault keeps the pool well under a stock PostgreSQL
 	// max_connections of 100 once multiplied by a service's replica count, leaving
@@ -48,6 +59,8 @@ var (
 	grpcPort = getEnv("GRPC_PORT")
 	grpcUrl  = getEnv("GRPC_URL")
 	grpcPing = getEnv("GRPC_PING")
+
+	reaperInterval = getEnv("REAPER_INTERVAL")
 
 	gcloudProjectId = getEnv("GCLOUD_PROJECT_ID")
 )
@@ -83,3 +96,29 @@ var (
 	// See: https://docs.cloud.google.com/resource-manager/docs/creating-managing-projects
 	GcloudProjectId = gcloudProjectId
 )
+
+// RawReaperInterval is the unparsed REAPER_INTERVAL value. The boot parses it through
+// [ReaperInterval] rather than config.LoadEnv, which would return the default on a parse error with
+// no log and no failure — so an interval written without its unit ("30" instead of "30s") would boot
+// at the default cadence silently.
+func RawReaperInterval() string { return reaperInterval }
+
+// ReaperInterval parses raw — a REAPER_INTERVAL value — into the reaper's sweep cadence. An empty
+// string yields [ReaperIntervalDefault]. A malformed or non-positive value is an error, so the boot
+// can refuse to start rather than sweep at a cadence nobody chose.
+func ReaperInterval(raw string) (time.Duration, error) {
+	if raw == "" {
+		return ReaperIntervalDefault, nil
+	}
+
+	interval, err := time.ParseDuration(raw)
+	if err != nil {
+		return 0, fmt.Errorf("parse REAPER_INTERVAL %q: %w", raw, err)
+	}
+
+	if interval <= 0 {
+		return 0, fmt.Errorf("%w, got %q", errReaperIntervalNonPositive, raw)
+	}
+
+	return interval, nil
+}

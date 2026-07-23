@@ -28,6 +28,7 @@ import (
 	"github.com/a-novel/service-jobs/internal/dao"
 	"github.com/a-novel/service-jobs/internal/handlers"
 	"github.com/a-novel/service-jobs/internal/handlers/protogen"
+	"github.com/a-novel/service-jobs/internal/lib"
 )
 
 const (
@@ -43,6 +44,15 @@ const (
 func main() {
 	cfg := config.AppPresetDefault
 	ctx := context.Background()
+
+	// Validate the reaper cadence before anything else starts. env.ReaperInterval refuses a malformed
+	// value rather than falling back the way config.LoadEnv would, so the boot fails loudly here
+	// instead of sweeping at a cadence nobody chose. Validated before the first defer, so a fatal here
+	// skips no cleanup.
+	reaperInterval, err := env.ReaperInterval(env.RawReaperInterval())
+	if err != nil {
+		log.Fatalf("reaper: %v", err)
+	}
 
 	otel.SetAppName(cfg.App.Name)
 
@@ -65,6 +75,7 @@ func main() {
 	daoJobClaim := dao.NewJobClaim()
 	daoJobSettle := dao.NewJobSettle()
 	daoJobRequeue := dao.NewJobRequeue()
+	daoJobReap := dao.NewJobReap()
 
 	// =================================================================================================================
 	// SERVICES
@@ -78,6 +89,15 @@ func main() {
 	serviceJobGet := core.NewJobGet(daoJobGet)
 	serviceJobClaim := core.NewJobClaim(daoJobClaim)
 	serviceJobSettle := core.NewJobSettle(daoJobSettle, daoJobRequeue, daoJobGetByID, transactor, jobRetentionDays)
+	serviceJobReap := core.NewJobReap(daoJobReap, jobRetentionDays)
+
+	// =================================================================================================================
+	// REAPER
+	// =================================================================================================================
+
+	reaper := lib.NewReaper(serviceJobReap, reaperInterval)
+	log.Printf("reaper: sweeping every %s, abandoning at the %d-day retention horizon",
+		reaperInterval, jobRetentionDays)
 
 	// =================================================================================================================
 	// HANDLERS
@@ -131,6 +151,17 @@ func main() {
 	// RUN
 	// =================================================================================================================
 
+	// Run the reaper alongside the server, on a context cancelled at shutdown. reaperDone lets the
+	// shutdown wait for an in-flight sweep to finish before the process exits.
+	reaperCtx, stopReaper := context.WithCancel(ctx)
+
+	reaperDone := make(chan struct{})
+	go func() {
+		defer close(reaperDone)
+
+		reaper.Run(reaperCtx)
+	}()
+
 	log.Println("Starting gRPC server on :" + strconv.Itoa(cfg.Grpc.Port))
 
 	go func() {
@@ -145,5 +176,7 @@ func main() {
 	<-quit
 
 	log.Println("Shutting down gRPC server...")
+	stopReaper()
+	<-reaperDone
 	server.GracefulStop()
 }

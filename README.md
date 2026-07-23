@@ -91,7 +91,7 @@ Every variable is read from the process environment. Names can be globally prefi
 | `POSTGRES_DSN` | PostgreSQL connection string. **Required.** | all    |
 
 <details>
-<summary>Optional configuration (gRPC, connection pool, OpenTelemetry)</summary>
+<summary>Optional configuration (gRPC, reaper, connection pool, OpenTelemetry)</summary>
 
 gRPC server:
 
@@ -99,6 +99,12 @@ gRPC server:
 | ----------- | -------------------------------------------------------- | ------- |
 | `GRPC_PORT` | Port the server listens on.                              | `8080`  |
 | `GRPC_PING` | Refresh interval for the server's internal health check. | `5s`    |
+
+Reaper — the background loop that recovers jobs a dead worker stranded (server images):
+
+| Name              | Description                                                                                                                     | Default |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| `REAPER_INTERVAL` | How often the reaper sweeps for expired leases (a Go duration, e.g. `30s`). A malformed value fails the boot, never falls back. | `30s`   |
 
 Database connection pool (server images). The limits are **per process**, so the database's `max_connections` has to cover every replica plus the migration job; the stock `postgres` default is 100.
 
