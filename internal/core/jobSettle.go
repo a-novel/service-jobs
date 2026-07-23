@@ -137,7 +137,7 @@ func (service *JobSettle) settle(
 		return nil, otel.ReportError(span, fmt.Errorf("settle job: %w", err))
 	}
 
-	return otel.ReportSuccess(span, newJob(entity)), nil
+	return otel.ReportSuccess(span, jobToCore(entity)), nil
 }
 
 // retry decides a retryable failure: requeue while an attempt remains, give up when none does. The
@@ -171,7 +171,7 @@ func (service *JobSettle) retry(ctx context.Context, span trace.Span, request *J
 				return fmt.Errorf("requeue job: %w", err)
 			}
 
-			result = newJob(requeued)
+			result = jobToCore(requeued)
 
 			return nil
 		}
@@ -187,7 +187,7 @@ func (service *JobSettle) retry(ctx context.Context, span trace.Span, request *J
 			return fmt.Errorf("settle job: %w", err)
 		}
 
-		result = newJob(settled)
+		result = jobToCore(settled)
 
 		return nil
 	})

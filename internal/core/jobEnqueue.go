@@ -110,7 +110,7 @@ func (service *JobEnqueue) Exec(ctx context.Context, request *JobEnqueueRequest)
 
 	span.SetAttributes(attribute.Bool("job.created", created))
 
-	return otel.ReportSuccess(span, &JobEnqueueResult{Job: newJob(entity), Created: created}), nil
+	return otel.ReportSuccess(span, &JobEnqueueResult{Job: jobToCore(entity), Created: created}), nil
 }
 
 // fingerprintOf digests the exact request bytes. It hashes the raw payload rather than a

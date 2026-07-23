@@ -67,7 +67,7 @@ func (service *JobClaim) Exec(ctx context.Context, request *JobClaimRequest) ([]
 
 	jobs := make([]*Job, len(entities))
 	for i, entity := range entities {
-		jobs[i] = newJob(entity)
+		jobs[i] = jobToCore(entity)
 	}
 
 	span.SetAttributes(attribute.Int("job.claimed", len(jobs)))

@@ -63,8 +63,9 @@ type Job struct {
 	ExpiresAt *time.Time
 }
 
-// newJob maps a data-access row onto the core view.
-func newJob(entity *dao.Job) *Job {
+// jobToCore maps a data-access row onto the core view. It mirrors the handler-layer translators
+// such as itemToProto: the type, the direction, then the destination layer.
+func jobToCore(entity *dao.Job) *Job {
 	return &Job{
 		ID:             entity.ID,
 		Kind:           entity.Kind,

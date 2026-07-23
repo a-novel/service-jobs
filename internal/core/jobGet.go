@@ -59,5 +59,5 @@ func (service *JobGet) Exec(ctx context.Context, request *JobGetRequest) (*Job, 
 		return nil, otel.ReportError(span, fmt.Errorf("get job: %w", err))
 	}
 
-	return otel.ReportSuccess(span, newJob(entity)), nil
+	return otel.ReportSuccess(span, jobToCore(entity)), nil
 }
