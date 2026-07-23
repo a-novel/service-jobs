@@ -48,7 +48,7 @@ Pin every image to the same release tag — see the [latest release](https://git
 ```yaml
 services:
   postgres-jobs:
-    image: ghcr.io/a-novel/service-jobs/database:v0.0.0
+    image: ghcr.io/a-novel/service-jobs/database:v0.1.0
     networks: [api]
     environment:
       POSTGRES_PASSWORD: postgres
@@ -68,7 +68,7 @@ services:
     networks: [api]
 
   service-jobs:
-    image: ghcr.io/a-novel/service-jobs/grpc:v0.0.0
+    image: ghcr.io/a-novel/service-jobs/grpc:v0.1.0
     ports: ["${SERVICE_JOBS_GRPC_PORT}:8080"] # the container always listens on 8080
     depends_on:
       postgres-jobs: { condition: service_healthy }
