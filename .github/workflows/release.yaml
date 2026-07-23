@@ -7,8 +7,9 @@ name: release
 #
 # The build jobs run on the default branch (the dispatch ref), not a tag, so
 # each tags its image from the explicit release version (build-actions `version:`
-# input) and pulls the database service image at the new tag; build-js publishes
-# from the release tag (ref) so the package carries the bumped version.
+# input) and pulls the database service image at the new tag. There is no package
+# to publish: the surface is gRPC only, so the Go client ships with the module
+# itself and there is no npm package.
 on:
   workflow_dispatch:
     inputs:
@@ -197,21 +198,6 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           run_args: -e POSTGRES_DSN="${POSTGRES_DSN}"
 
-  build-js:
-    needs: [release]
-    if: ${{ !inputs.dry_run }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: a-novel-kit/workflows/publish-actions/npm@v1.25.1
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          app_private_key: ${{ secrets.PUBLISH_BOT_PRIVATE_KEY }}
-          client_id: ${{ vars.PUBLISH_BOT_CLIENT_ID }}
-          ref: ${{ needs.release.outputs.tag }}
-
   # Everything shipped — clear this repo's awaiting-release board items.
   archive:
     needs:
@@ -220,7 +206,6 @@ jobs:
       - build-migrations
       - build-grpc
       - build-standalone-grpc
-      - build-js
     if: ${{ !inputs.dry_run }}
     runs-on: ubuntu-latest
     permissions:

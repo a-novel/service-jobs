@@ -43,8 +43,6 @@ Pin every image to the same release tag — see the [latest release](https://git
 
 > **Retention purge.** The `database` image installs `pg_cron` and schedules a job that deletes settled records seven days after they settle. It is scheduled at first start, not by the migrations, so a **bring-your-own-Postgres** deployment must schedule the purge itself — see [CONTRIBUTING.md](./CONTRIBUTING.md#retention-purge).
 
-<!-- TODO(project-docs): replace v0.0.0 once the service cuts its first release -->
-
 ```yaml
 services:
   postgres-jobs:
@@ -60,7 +58,7 @@ services:
       - jobs-postgres-data:/var/lib/postgresql/
 
   migrations-jobs:
-    image: ghcr.io/a-novel/service-jobs/jobs/migrations:v0.0.0
+    image: ghcr.io/a-novel/service-jobs/jobs/migrations:v0.1.0
     depends_on:
       postgres-jobs: { condition: service_healthy }
     environment:
