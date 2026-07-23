@@ -1,4 +1,4 @@
-// Command grpc serves the service's gRPC API. It is the service's request-facing entrypoint;
+// Command grpc serves the jobs queue over gRPC. It is the service's request-facing entrypoint;
 // cmd/migrations applies the database schema.
 package main
 
@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"strconv"
 	"syscall"
+	"time"
 
 	"github.com/samber/lo"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
@@ -23,8 +24,20 @@ import (
 
 	"github.com/a-novel/service-jobs/internal/config"
 	"github.com/a-novel/service-jobs/internal/config/env"
+	"github.com/a-novel/service-jobs/internal/core"
+	"github.com/a-novel/service-jobs/internal/dao"
 	"github.com/a-novel/service-jobs/internal/handlers"
 	"github.com/a-novel/service-jobs/internal/handlers/protogen"
+)
+
+const (
+	// jobRetentionDays is how long a settled job is kept before the scheduled purge deletes it. Seven
+	// days is the retry window, past which a repeated request is a new request rather than a retry.
+	jobRetentionDays = 7
+	// jobWatchPollInterval is how often a JobWatch stream re-reads the job it is watching. Nothing in
+	// the stack pushes a change, so the stream learns of one by polling; the interval bounds the
+	// detection delay a watching caller sees.
+	jobWatchPollInterval = time.Second
 )
 
 func main() {
@@ -43,10 +56,40 @@ func main() {
 	ctx = lo.Must(postgres.NewContext(ctx, config.PostgresPresetDefault))
 
 	// =================================================================================================================
+	// DAO
+	// =================================================================================================================
+
+	daoJobEnqueue := dao.NewJobEnqueue()
+	daoJobGet := dao.NewJobGet()
+	daoJobGetByID := dao.NewJobGetByID()
+	daoJobClaim := dao.NewJobClaim()
+	daoJobSettle := dao.NewJobSettle()
+	daoJobRequeue := dao.NewJobRequeue()
+
+	// =================================================================================================================
+	// SERVICES
+	// =================================================================================================================
+
+	// The transactor makes the settle service's read-then-requeue-or-give-up one unit of work. It is
+	// the only operation in the service that writes conditionally on what it read.
+	transactor := postgres.NewTransactor(nil)
+
+	serviceJobEnqueue := core.NewJobEnqueue(daoJobEnqueue)
+	serviceJobGet := core.NewJobGet(daoJobGet)
+	serviceJobClaim := core.NewJobClaim(daoJobClaim)
+	serviceJobSettle := core.NewJobSettle(daoJobSettle, daoJobRequeue, daoJobGetByID, transactor, jobRetentionDays)
+
+	// =================================================================================================================
 	// HANDLERS
 	// =================================================================================================================
 
 	handlerStatus := handlers.NewGrpcStatus()
+	handlerJobEnqueue := handlers.NewJobEnqueue(serviceJobEnqueue)
+	handlerJobGet := handlers.NewJobGet(serviceJobGet)
+	handlerJobClaim := handlers.NewJobClaim(serviceJobClaim)
+	handlerJobSettle := handlers.NewJobSettle(serviceJobSettle)
+	// Watch polls the owner-scoped read and streams each change, so it takes the same get service.
+	handlerJobWatch := handlers.NewJobWatch(serviceJobGet, jobWatchPollInterval)
 
 	// =================================================================================================================
 	// SERVER
@@ -76,6 +119,11 @@ func main() {
 	grpcf.SetEchoServersContext(ctx, server, cfg.Grpc.Ping)
 
 	protogen.RegisterStatusServiceServer(server, handlerStatus)
+	protogen.RegisterJobEnqueueServiceServer(server, handlerJobEnqueue)
+	protogen.RegisterJobGetServiceServer(server, handlerJobGet)
+	protogen.RegisterJobClaimServiceServer(server, handlerJobClaim)
+	protogen.RegisterJobSettleServiceServer(server, handlerJobSettle)
+	protogen.RegisterJobWatchServiceServer(server, handlerJobWatch)
 
 	reflection.Register(server)
 

@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+import "job.proto";
+
+// JobWatchService streams a job's state to a caller waiting on its outcome. The stream is resumable
+// by construction: a caller that reconnects calls it again, and the server answers from current
+// state — the job as it stands now, then each change until it is terminal. There is no cursor and no
+// window in which a change can be missed, because the stream reads durable state rather than
+// consuming events.
+//
+// A caller that wants a single answer uses JobGet instead; this is the latency lever for a caller
+// that would otherwise poll.
+service JobWatchService {
+  rpc JobWatch(JobWatchRequest) returns (stream JobWatchResponse);
+}
+
+// JobWatchRequest identifies the job to watch and the owner it must belong to.
+message JobWatchRequest {
+  // ID of the job to watch, formatted as a UUID.
+  string id = 1;
+  // OwnerID scopes the watch, formatted as a UUID. A job owned by anyone else reports not-found.
+  string owner_id = 2;
+}
+
+// JobWatchResponse carries one snapshot of the watched job. One is sent on subscribe and one on each
+// change until the job is terminal.
+message JobWatchResponse {
+  Job job = 1;
+}

@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+import "job.proto";
+
+// JobSettleService records the outcome of a run. A retryable failure folds into settle: there is no
+// separate requeue call, so a worker cannot hand back a job it has already reported failed.
+service JobSettleService {
+  rpc JobSettle(JobSettleRequest) returns (JobSettleResponse);
+}
+
+// JobSettleRequest reports the outcome of a run. Exactly one of the outcome fields is set: a success
+// carrying the result, or a failure.
+message JobSettleRequest {
+  // ID of the job to settle, formatted as a UUID.
+  string id = 1;
+  // WorkerID must hold the claim on the job. A worker cannot settle work it does not hold.
+  string worker_id = 2;
+  // Outcome is the result on success or the failure otherwise.
+  oneof outcome {
+    // Result is the handler's output on success, as JSON bytes.
+    bytes result = 3;
+    // Failure describes a failed run.
+    JobFailure failure = 4;
+  }
+}
+
+// JobFailure is the outcome of a failed run.
+message JobFailure {
+  // Error is the structured failure recorded on the job, as JSON bytes.
+  bytes error = 1;
+  // Retryable marks a failure the substrate may retry while attempts remain. A worker that leaves it
+  // false gets a single attempt, the right default for a priced call.
+  bool retryable = 2;
+}
+
+// JobSettleResponse returns the job after the transition — terminal on success or a spent failure,
+// pending again when a retryable failure had an attempt left.
+message JobSettleResponse {
+  Job job = 1;
+}

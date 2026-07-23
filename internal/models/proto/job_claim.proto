@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+import "job.proto";
+
+// JobClaimService takes a batch of pending jobs for a worker to run. Concurrent claims never contend:
+// each takes a disjoint batch and neither blocks the other.
+service JobClaimService {
+  rpc JobClaim(JobClaimRequest) returns (JobClaimResponse);
+}
+
+// JobClaimRequest carries what a worker needs to claim work.
+message JobClaimRequest {
+  // Kinds are the handler kinds this worker serves. A worker that names none claims nothing.
+  repeated string kinds = 1;
+  // WorkerID is recorded on each claimed job so a stranded claim can be traced.
+  string worker_id = 2;
+  // Limit caps how many jobs one claim takes.
+  int32 limit = 3;
+  // LeaseSeconds is the visibility timeout: how long the claim holds before the reaper may recover
+  // the job. Added to the database clock, so worker clock skew never enters the lease.
+  int32 lease_seconds = 4;
+}
+
+// JobClaimResponse returns the claimed batch, empty when nothing was available.
+message JobClaimResponse {
+  repeated Job jobs = 1;
+}

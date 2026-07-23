@@ -13,7 +13,7 @@ Two consequences worth knowing before you add a file:
 - The container's liveness check is `grpc.health.v1.Health/Check`, not an HTTP `/ping`. A gRPC service exposes its health through the standard health protocol, so nothing here needs an HTTP listener.
 - `prettier` is still installed and still runs in CI. It formats `.sql` and `.yaml`, so the migrations and the workflows are covered by `pnpm format` and gated by `pnpm lint:js` — the JavaScript toolchain survives the removal of the JavaScript client.
 
-The `Item*Service` RPCs are placeholder wiring inherited from the service template, not a feature. Their shapes live in [`internal/models/proto/`](./internal/models/proto/), and the queue replaces them rather than growing alongside them.
+The queue is exposed as five per-operation services — `JobEnqueueService`, `JobGetService`, `JobClaimService`, `JobSettleService` and the streaming `JobWatchService` — whose contracts live in [`internal/models/proto/`](./internal/models/proto/). `JobWatch` is server-streaming; the rest are unary.
 
 ---
 
@@ -54,7 +54,7 @@ err := service.transactor.WithinTx(ctx, func(ctx context.Context) error {
 service := core.NewSomeService(daoSomething, postgres.NewTransactor(nil))
 ```
 
-Nothing in this service uses one yet, because no operation writes twice — the `item` resource is single-write throughout. The convention is here rather than demonstrated because wrapping a single write in a transaction is noise, and a scaffold that shows it teaches every service copied from it to do the same.
+The settle service is the one place that uses it. A retryable failure reads the job's attempt count and then either requeues it or gives up — a write conditioned on a read — and the transaction is what stops the reaper recovering the job between the two. Every other operation is a single write and takes no transaction.
 
 **Pass the callback's `ctx` down, not the outer one.** Data-access objects resolve their database handle from the context, and the transaction is installed on the context the callback receives. An inner call given the outer context runs on the connection pool and commits on its own, while the surrounding block still reports success. That is not hypothetical: it is what a sibling service did in four operations for months, with a green build the whole time.
 
@@ -69,7 +69,7 @@ Unit-test a service that takes a transactor with `transactiontest.NewTransactor`
 
 ## Schema conventions
 
-These hold for every new table. The scaffold `items` table predates them and is not the reference.
+These hold for every new table, as the `jobs` table demonstrates.
 
 **Identifiers are time-ordered and minted in Go.** Columns default to `uuidv7()`, which the project's PostgreSQL 18 image provides natively, so a table under insert churn keeps index locality instead of scattering writes across the whole B-tree. Core still generates the identifier and passes it in: an insert that has to read back a database-generated id cannot tell its own row from one a concurrent caller inserted under the same unique key.
 
