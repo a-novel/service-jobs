@@ -98,7 +98,7 @@ A predicate is fail-closed: a caller that forgets the owner argument fails to sc
 
 **A cross-owner read is not-found, never access-denied.** The data-access object joins `sql.ErrNoRows` onto its own sentinel, and the handler maps that to `NOT_FOUND`. Answering `PERMISSION_DENIED` would confirm the row exists.
 
-**Every migration gets its own deliberately allocated prefix.** Take it from `date '+%Y%m%d%H%M%S'` at the moment you create the file. bun derives a migration's identity from that numeric prefix alone, so two files sharing one merge into a single migration: the second replaces the first, with no error at discovery and none at apply, and the first migration simply never runs. The `test-go` job checks prefixes for uniqueness per direction before it applies anything — an `.up.sql` and its `.down.sql` are meant to share a prefix, two different migrations are not.
+**Every migration gets its own deliberately allocated prefix.** Take it from `date '+%Y%m%d%H%M%S'` at the moment you create the file. bun derives a migration's identity from that numeric prefix alone, so two files sharing one merge into a single migration: the second replaces the first, with no error at discovery and none at apply, and the first migration simply never runs. An `.up.sql` and its `.down.sql` are meant to share a prefix; two different migrations are not.
 
 ---
 
