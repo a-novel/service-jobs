@@ -16,37 +16,53 @@ import (
 func TestJobCountPending(t *testing.T) {
 	t.Parallel()
 
-	t.Run("Success", func(t *testing.T) {
-		t.Parallel()
+	errFoo := errors.New("foo")
 
-		mockDao := coremocks.NewMockJobCountPendingDao(t)
-		mockDao.EXPECT().
-			Exec(mock.Anything).
-			Return(&dao.JobPendingStats{Pending: 3, OldestAge: 90 * time.Second}, nil)
+	type daoMock struct {
+		resp *dao.JobPendingStats
+		err  error
+	}
 
-		service := core.NewJobCountPending(mockDao)
+	testCases := []struct {
+		name string
 
-		stats, err := service.Exec(t.Context())
-		require.NoError(t, err)
-		require.Equal(t, 3, stats.Pending)
-		require.Equal(t, 90*time.Second, stats.OldestAge)
+		daoMock *daoMock
 
-		mockDao.AssertExpectations(t)
-	})
+		expect    *core.JobPendingStats
+		expectErr error
+	}{
+		{
+			name: "Success",
 
-	t.Run("Error/Dao", func(t *testing.T) {
-		t.Parallel()
+			daoMock: &daoMock{resp: &dao.JobPendingStats{Pending: 3, OldestAge: 90 * time.Second}},
 
-		errFoo := errors.New("foo")
+			expect: &core.JobPendingStats{Pending: 3, OldestAge: 90 * time.Second},
+		},
+		{
+			name: "Error/Dao",
 
-		mockDao := coremocks.NewMockJobCountPendingDao(t)
-		mockDao.EXPECT().Exec(mock.Anything).Return(nil, errFoo)
+			daoMock:   &daoMock{err: errFoo},
+			expectErr: errFoo,
+		},
+	}
 
-		service := core.NewJobCountPending(mockDao)
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
 
-		_, err := service.Exec(t.Context())
-		require.ErrorIs(t, err, errFoo)
+			mockDao := coremocks.NewMockJobCountPendingDao(t)
 
-		mockDao.AssertExpectations(t)
-	})
+			if testCase.daoMock != nil {
+				mockDao.EXPECT().Exec(mock.Anything).Return(testCase.daoMock.resp, testCase.daoMock.err)
+			}
+
+			service := core.NewJobCountPending(mockDao)
+
+			stats, err := service.Exec(t.Context())
+			require.ErrorIs(t, err, testCase.expectErr)
+			require.Equal(t, testCase.expect, stats)
+
+			mockDao.AssertExpectations(t)
+		})
+	}
 }

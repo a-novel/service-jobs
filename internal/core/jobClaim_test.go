@@ -18,23 +18,27 @@ func TestJobClaim(t *testing.T) {
 
 	errFoo := errors.New("foo")
 
+	type daoMock struct {
+		resp []*dao.Job
+		err  error
+	}
+
 	testCases := []struct {
 		name string
 
 		request *core.JobClaimRequest
 
-		daoResp   []*dao.Job
-		daoErr    error
-		callsDao  bool
+		daoMock *daoMock
+
 		expectLen int
 		expectErr error
 	}{
 		{
 			name: "Success",
 
-			request:  &core.JobClaimRequest{Kinds: []string{"generate"}, WorkerID: "w", Limit: 5, LeaseSeconds: 60},
-			daoResp:  []*dao.Job{{ID: uuid.New()}, {ID: uuid.New()}},
-			callsDao: true,
+			request: &core.JobClaimRequest{Kinds: []string{"generate"}, WorkerID: "w", Limit: 5, LeaseSeconds: 60},
+
+			daoMock: &daoMock{resp: []*dao.Job{{ID: uuid.New()}, {ID: uuid.New()}}},
 
 			expectLen: 2,
 		},
@@ -54,8 +58,7 @@ func TestJobClaim(t *testing.T) {
 			name: "Error/Dao",
 
 			request:   &core.JobClaimRequest{Kinds: []string{"generate"}, WorkerID: "w", Limit: 5, LeaseSeconds: 60},
-			daoErr:    errFoo,
-			callsDao:  true,
+			daoMock:   &daoMock{err: errFoo},
 			expectErr: errFoo,
 		},
 	}
@@ -66,7 +69,7 @@ func TestJobClaim(t *testing.T) {
 
 			mockDao := coremocks.NewMockJobClaimDao(t)
 
-			if testCase.callsDao {
+			if testCase.daoMock != nil {
 				mockDao.EXPECT().
 					Exec(mock.Anything, &dao.JobClaimRequest{
 						Kinds:        testCase.request.Kinds,
@@ -74,7 +77,7 @@ func TestJobClaim(t *testing.T) {
 						Limit:        testCase.request.Limit,
 						LeaseSeconds: testCase.request.LeaseSeconds,
 					}).
-					Return(testCase.daoResp, testCase.daoErr)
+					Return(testCase.daoMock.resp, testCase.daoMock.err)
 			}
 
 			service := core.NewJobClaim(mockDao)
