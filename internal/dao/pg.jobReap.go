@@ -29,6 +29,10 @@ type JobReapRequest struct {
 // the pending queue; a job at its attempt cap settles abandoned. Both branches happen in one
 // statement, so a sweep is a single round trip regardless of how many claims lapsed.
 //
+// The reapable set is taken FOR UPDATE SKIP LOCKED, so a reaper in one replica sweeps concurrently
+// with a reaper in another without blocking on its locks: each recovers a disjoint set, and a row
+// one skips is one the other is already recovering.
+//
 // This is the correctness mechanism of the queue, not the drain: a worker that dies mid-run leaves a
 // claimed row whose lease simply stops being renewed, and the reaper is what returns that work to
 // circulation.

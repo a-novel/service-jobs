@@ -3,8 +3,10 @@ package dao_test
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/a-novel-kit/golib/postgres"
@@ -99,4 +101,63 @@ func TestJobReap(t *testing.T) {
 			})
 		})
 	}
+
+	// Two reapers sweeping at once is the multi-replica case: each service-jobs process runs the loop
+	// against one table. FOR UPDATE SKIP LOCKED must hand every lapsed claim to exactly one sweep —
+	// none double-reaped, none missed.
+	t.Run("ConcurrentSweepsDisjoint", func(t *testing.T) {
+		t.Parallel()
+
+		postgres.RunDBTest(t, configtest.PostgresPreset, migrations.Migrations, func(ctx context.Context, t *testing.T) {
+			t.Helper()
+
+			const jobCount = 6
+
+			for i := range jobCount {
+				enqueueJob(ctx, t, seedID(i), 2)
+			}
+
+			// One claim with a lease already in the past leaves every job claimed and immediately
+			// reapable.
+			_, err := dao.NewJobClaim().Exec(ctx, &dao.JobClaimRequest{
+				Kinds: []string{"generate"}, WorkerID: fixtureWorkerID, Limit: jobCount, LeaseSeconds: -1,
+			})
+			require.NoError(t, err)
+
+			reap := dao.NewJobReap()
+
+			var (
+				wg         sync.WaitGroup
+				resA, resB []*dao.Job
+				errA, errB error
+			)
+
+			wg.Add(2)
+			go func() {
+				defer wg.Done()
+
+				resA, errA = reap.Exec(ctx, &dao.JobReapRequest{Error: reapErr, RetentionDays: 7})
+			}()
+			go func() {
+				defer wg.Done()
+
+				resB, errB = reap.Exec(ctx, &dao.JobReapRequest{Error: reapErr, RetentionDays: 7})
+			}()
+
+			wg.Wait()
+
+			require.NoError(t, errA)
+			require.NoError(t, errB)
+
+			// Every lapsed claim is recovered exactly once across the two sweeps.
+			seen := map[uuid.UUID]struct{}{}
+			for _, job := range append(append([]*dao.Job{}, resA...), resB...) {
+				_, dup := seen[job.ID]
+				require.False(t, dup, "job %s reaped by both sweeps", job.ID)
+				seen[job.ID] = struct{}{}
+			}
+
+			require.Len(t, seen, jobCount)
+		})
+	})
 }
