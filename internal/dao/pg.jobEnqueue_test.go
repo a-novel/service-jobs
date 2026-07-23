@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/samber/lo"
 	"github.com/stretchr/testify/require"
 
 	"github.com/a-novel-kit/golib/postgres"
@@ -22,8 +23,6 @@ func TestJobEnqueue(t *testing.T) {
 	ownerAlice := uuid.MustParse("00000000-0000-0000-0000-00000000a11c")
 	ownerBob := uuid.MustParse("00000000-0000-0000-0000-00000000b0b0")
 
-	keyOf := func(value string) *string { return &value }
-
 	// A request whose fields the individual cases override. Every field the database requires is set,
 	// so a case only states what it is actually about.
 	newRequest := func(id uuid.UUID) *dao.JobEnqueueRequest {
@@ -32,13 +31,13 @@ func TestJobEnqueue(t *testing.T) {
 			Kind:               "generate",
 			Payload:            json.RawMessage(`{"seed":"a idea"}`),
 			OwnerID:            ownerAlice,
-			IdempotencyKey:     keyOf("key-1"),
+			IdempotencyKey:     lo.ToPtr("key-1"),
 			RequestFingerprint: []byte{0x01, 0x02},
 			MaxAttempts:        1,
 		}
 	}
 
-	withID := func(id string, mutate func(*dao.JobEnqueueRequest)) *dao.JobEnqueueRequest {
+	newRequestWithID := func(id string, mutate func(*dao.JobEnqueueRequest)) *dao.JobEnqueueRequest {
 		request := newRequest(uuid.MustParse(id))
 		if mutate != nil {
 			mutate(request)
@@ -66,7 +65,7 @@ func TestJobEnqueue(t *testing.T) {
 			name: "Success",
 
 			requests: []*dao.JobEnqueueRequest{
-				withID("00000000-0000-0000-0000-000000000001", nil),
+				newRequestWithID("00000000-0000-0000-0000-000000000001", nil),
 			},
 
 			expectCreated: []bool{true},
@@ -78,8 +77,8 @@ func TestJobEnqueue(t *testing.T) {
 			name: "Success/IdempotentReplay",
 
 			requests: []*dao.JobEnqueueRequest{
-				withID("00000000-0000-0000-0000-000000000001", nil),
-				withID("00000000-0000-0000-0000-000000000002", nil),
+				newRequestWithID("00000000-0000-0000-0000-000000000001", nil),
+				newRequestWithID("00000000-0000-0000-0000-000000000002", nil),
 			},
 
 			expectCreated: []bool{true, false},
@@ -91,8 +90,8 @@ func TestJobEnqueue(t *testing.T) {
 			name: "Success/SameKeyDifferentKinds",
 
 			requests: []*dao.JobEnqueueRequest{
-				withID("00000000-0000-0000-0000-000000000001", nil),
-				withID("00000000-0000-0000-0000-000000000002", func(r *dao.JobEnqueueRequest) {
+				newRequestWithID("00000000-0000-0000-0000-000000000001", nil),
+				newRequestWithID("00000000-0000-0000-0000-000000000002", func(r *dao.JobEnqueueRequest) {
 					r.Kind = "consolidate"
 				}),
 			},
@@ -105,8 +104,8 @@ func TestJobEnqueue(t *testing.T) {
 			name: "Success/SameKeyDifferentOwners",
 
 			requests: []*dao.JobEnqueueRequest{
-				withID("00000000-0000-0000-0000-000000000001", nil),
-				withID("00000000-0000-0000-0000-000000000002", func(r *dao.JobEnqueueRequest) {
+				newRequestWithID("00000000-0000-0000-0000-000000000001", nil),
+				newRequestWithID("00000000-0000-0000-0000-000000000002", func(r *dao.JobEnqueueRequest) {
 					r.OwnerID = ownerBob
 				}),
 			},
@@ -120,10 +119,10 @@ func TestJobEnqueue(t *testing.T) {
 			name: "Success/WithoutIdempotencyKey",
 
 			requests: []*dao.JobEnqueueRequest{
-				withID("00000000-0000-0000-0000-000000000001", func(r *dao.JobEnqueueRequest) {
+				newRequestWithID("00000000-0000-0000-0000-000000000001", func(r *dao.JobEnqueueRequest) {
 					r.IdempotencyKey = nil
 				}),
-				withID("00000000-0000-0000-0000-000000000002", func(r *dao.JobEnqueueRequest) {
+				newRequestWithID("00000000-0000-0000-0000-000000000002", func(r *dao.JobEnqueueRequest) {
 					r.IdempotencyKey = nil
 				}),
 			},
@@ -137,7 +136,7 @@ func TestJobEnqueue(t *testing.T) {
 			name: "Success/RolledBackTransaction",
 
 			requests: []*dao.JobEnqueueRequest{
-				withID("00000000-0000-0000-0000-000000000001", nil),
+				newRequestWithID("00000000-0000-0000-0000-000000000001", nil),
 			},
 
 			withinRolledBackTx: true,
