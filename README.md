@@ -172,6 +172,26 @@ func main() {
 }
 ```
 
+## Reaper cost
+
+The reaper — the background loop that recovers jobs a dead worker stranded — sweeps on a fixed interval (30s by default). A sweep is one statement served by a partial index on claimed rows, so an idle queue costs an index probe, and a real sweep's cost tracks how many leases actually lapsed, not the size of the queue around them.
+
+The `benchmark-go` CI job measures one sweep recovering a given number of stranded claims. On GitHub's standard 4-core runner:
+
+| Claims recovered in one sweep | Reap latency |
+| ----------------------------- | ------------ |
+| 100                           | ~1.5 ms      |
+| 1,000                         | ~13 ms       |
+| 10,000                        | ~240 ms      |
+
+Even a whole worker fleet dying at once — 10,000 claims stranded — is recovered in well under a second against a 30-second sweep interval, so the reaper spends a fraction of a percent of its cycle even in that worst case and is never the queue's capacity limit. (Much of the 10,000-claim figure is materializing every recovered row back to the caller, which the loop then only counts, so it is a ceiling rather than the cost of the recovery itself.)
+
+Reproduce it against any Postgres:
+
+```bash
+POSTGRES_DSN=... go test -bench=BenchmarkJobReap -benchmem -benchtime=20x -run='^$' ./internal/dao/...
+```
+
 ## Running locally
 
 The `standalone-grpc` image bundles the migration job with the server, so a single container brings the service up against an empty database. It is a development convenience: a production deployment runs migrations as their own job, so a failed migration stops the rollout instead of restarting a server.
