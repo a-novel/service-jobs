@@ -36,10 +36,12 @@ The service runs as published OCI images plus a PostgreSQL database. The server 
 | ------------------------------ | --------------------------------------------------------------------------- |
 | `service-jobs/grpc`            | The queue API. Internal network only.                                       |
 | `service-jobs/jobs/migrations` | One-shot schema migration job; runs to completion before the server starts. |
-| `service-jobs/database`        | Pre-tuned PostgreSQL image — or bring your own Postgres.                    |
+| `service-jobs/database`        | Pre-tuned PostgreSQL image with `pg_cron` — or bring your own Postgres.     |
 | `service-jobs/standalone-grpc` | Server plus migrations in one image. Local development only.                |
 
 Pin every image to the same release tag — see the [latest release](https://github.com/a-novel/service-jobs/releases/latest).
+
+> **Retention purge.** The `database` image installs `pg_cron` and schedules a job that deletes settled records seven days after they settle. It is scheduled at first start, not by the migrations, so a **bring-your-own-Postgres** deployment must schedule the purge itself — see [CONTRIBUTING.md](./CONTRIBUTING.md#retention-purge).
 
 <!-- TODO(project-docs): replace v0.0.0 once the service cuts its first release -->
 

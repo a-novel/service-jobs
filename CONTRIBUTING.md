@@ -102,6 +102,16 @@ A predicate is fail-closed: a caller that forgets the owner argument fails to sc
 
 ---
 
+## Retention purge
+
+Settled jobs are deleted seven days after they settle — the window a retry may still arrive in, not a forensics one, since the structured logs carry that and the job's result is a handoff buffer rather than the system of record. The delete carries no logic a Go loop would, so `pg_cron` runs it in the database on a schedule rather than an in-process loop. (The reaper stays in-process because requeue-or-abandon _does_ carry logic — that split, purge in the database and recovery in Go, is deliberate.)
+
+**The schedule lives in `builds/database.sql`, not a migration — a deliberate choice.** `pg_cron` is inherently single-database: its `cron` schema exists only in the database named by `cron.database_name`. `postgres.RunDBTest` clones a fresh database per test, none of which has that schema, so a migration calling `cron.schedule` would fail every DAO test. Scheduling from the image's init SQL sidesteps the harness — init SQL runs once on the real database and never on a test clone — at the cost that the schedule does not travel with the migrations. A **bring-your-own-Postgres** deployment therefore has to schedule the purge itself, or run this service's database image, which does it at first start. The alternative — keeping the schedule in a migration behind a no-op `cron` stub prepended to the migration set in every DAO test — was rejected as a standing per-test tax; `service-json-keys` carried exactly that stub before removing it.
+
+The purge is tested through its statement, not its schedule: `pg.jobPurge_test.go` reads the `DELETE` out of `builds/database.sql` and runs it against a seeded database, so the assertion cannot drift from what `pg_cron` executes. The job name is service-scoped (`service-jobs-purge-settled`) because `pg_cron` names are global to the PostgreSQL instance, and `cron.schedule` upserts by name, so re-running the init SQL never creates a second job.
+
+---
+
 ## Questions?
 
 [Open an issue](https://github.com/a-novel/service-jobs/issues) — include logs and environment details.
