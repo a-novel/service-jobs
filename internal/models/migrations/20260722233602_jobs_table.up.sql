@@ -10,8 +10,18 @@
 --     written inside a transaction could never advance past the value its neighbors already hold.
 --   * Identifiers are time-ordered (uuidv7, native to the PostgreSQL 18 image this service pins), so
 --     a table with heavy insert churn keeps index locality.
---   * status is text with a CHECK list. Adding a value stays a plain migration.
+--   * status is a database enum. The value set changes rarely, and when it does a migration on the
+--     type is the mechanism that keeps every column consistent — a text column with a CHECK cannot.
 --   * owner_id, not actor_id, so one word means one thing across the whole queue.
+CREATE TYPE job_status AS ENUM(
+  'pending',
+  'claimed',
+  'succeeded',
+  'failed',
+  'abandoned',
+  'cancelled'
+);
+
 CREATE TABLE jobs (
   id uuid PRIMARY KEY NOT NULL DEFAULT uuidv7(),
   kind text NOT NULL CHECK (kind <> ''),
@@ -23,16 +33,7 @@ CREATE TABLE jobs (
   /* Digest of the request body, defaulting in the application to the digest of an empty body. NOT
   NULL so a same-key-different-payload check cannot pass on a null stored side. */
   request_fingerprint bytea NOT NULL,
-  status text NOT NULL DEFAULT 'pending' CHECK (
-    status IN (
-      'pending',
-      'claimed',
-      'succeeded',
-      'failed',
-      'abandoned',
-      'cancelled'
-    )
-  ),
+  status job_status NOT NULL DEFAULT 'pending',
   attempt smallint NOT NULL DEFAULT 0 CHECK (attempt >= 0),
   /* One attempt by default, which is the right floor for a priced call. */
   max_attempts smallint NOT NULL DEFAULT 1 CHECK (max_attempts >= 1),
@@ -53,9 +54,14 @@ CREATE TABLE jobs (
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   settled_at timestamptz,
   expires_at timestamptz,
+  -- A lease exists exactly when the job is claimed. The equality binds both directions: a claimed
+  -- row without a lease, and a lease on a row in any other status, are both rejected.
   CONSTRAINT jobs_lease_matches_status CHECK (
     (status = 'claimed') = (lease_expires_at IS NOT NULL)
   ),
+  -- The settled and expiry timestamps are set exactly when the status is terminal. A partial write
+  -- that settles the status without stamping both, or stamps them on a still-running job, is
+  -- rejected by the database rather than by application code.
   CONSTRAINT jobs_terminal_fields CHECK (
     (
       status IN ('succeeded', 'failed', 'abandoned', 'cancelled')
