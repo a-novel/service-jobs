@@ -1,6 +1,8 @@
 syntax = "proto3";
 
-// StatusService reports the health of the gRPC server's dependencies.
+import "google/protobuf/duration.proto";
+
+// StatusService reports the health of the gRPC server's dependencies and the queue's own backlog.
 service StatusService {
   rpc Status(StatusRequest) returns (StatusResponse);
 }
@@ -29,10 +31,24 @@ message DependencyHealth {
   DependencyStatus status = 1;
 }
 
+// QueueDepth reports the queue's own backlog: how many jobs are due to run and still waiting, and
+// how long the oldest of them has waited. Two numbers rather than one — a count alone cannot tell a
+// queue absorbing a burst from a stalled one, and the oldest-pending age is what separates them.
+message QueueDepth {
+  // pending is the number of jobs whose run_at has been reached and that no worker has claimed yet.
+  int64 pending = 1;
+  // oldest_pending_age is how long the oldest due-and-unclaimed job has been waiting. Absent when
+  // nothing is pending.
+  google.protobuf.Duration oldest_pending_age = 2;
+}
+
 // StatusRequest takes no parameters.
 message StatusRequest {}
 
-// StatusResponse reports the health of each dependency the service relies on.
+// StatusResponse reports the health of each dependency the service relies on, and the queue backlog.
 message StatusResponse {
   DependencyHealth postgres = 1;
+  // queue is the backlog report. Absent when the database is unreachable, since it cannot be
+  // measured — postgres reports down in that case.
+  QueueDepth queue = 2;
 }
