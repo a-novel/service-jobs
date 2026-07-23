@@ -3,6 +3,7 @@ package dao_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -23,6 +24,11 @@ const (
 	fixtureJobID    = "00000000-0000-0000-0000-000000000001"
 	fixtureWorkerID = "worker-a"
 )
+
+// seedID returns a distinct fixture job id per index, for cases seeding several pending jobs.
+func seedID(i int) string {
+	return fmt.Sprintf("00000000-0000-0000-0000-%012d", i+1)
+}
 
 // enqueueJob seeds one pending job. maxAttempts lets a case choose whether a reaped job requeues or
 // abandons.
