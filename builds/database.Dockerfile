@@ -6,9 +6,22 @@ FROM docker.io/library/postgres:18.4
 ARG DEBIAN_FRONTEND=noninteractive
 
 # ======================================================================================================================
+# Install pg_cron.
+# ======================================================================================================================
+# From the PGDG repository the base image already configures, at a pinned version — reproducible, and
+# no source build or builder stage. pg_cron runs the retention purge (see builds/database.sql); it
+# cannot load without shared_preload_libraries, set on the conf sample initdb copies into place so the
+# extension is available to both the init-time server that runs database.sql and the running server.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends postgresql-18-cron=1.6.7-3.pgdg13+1 \
+  && rm -rf /var/lib/apt/lists/* \
+  && echo "shared_preload_libraries='pg_cron'" >> /usr/share/postgresql/postgresql.conf.sample
+
+# ======================================================================================================================
 # Prepare extension scripts.
 # ======================================================================================================================
-# Entrypoint that starts postgres with the extension settings applied.
+# Entrypoint that starts postgres with the extension settings applied — it points cron.database_name
+# at the served database.
 COPY ./builds/database.entrypoint.sh /usr/local/bin/database.entrypoint.sh
 RUN chmod +x /usr/local/bin/database.entrypoint.sh
 
