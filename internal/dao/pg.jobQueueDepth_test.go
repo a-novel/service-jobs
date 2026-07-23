@@ -17,62 +17,128 @@ import (
 	"github.com/a-novel/service-jobs/internal/models/migrations"
 )
 
+// scheduleFuture pushes a job's run_at an hour ahead, so it is pending but not yet due.
+func scheduleFuture(ctx context.Context, t *testing.T, id string) {
+	t.Helper()
+
+	pg, err := postgres.GetContext(ctx)
+	require.NoError(t, err)
+
+	_, err = pg.NewRaw(
+		"UPDATE jobs SET run_at = clock_timestamp() + interval '1 hour' WHERE id = ?",
+		uuid.MustParse(id),
+	).Exec(ctx)
+	require.NoError(t, err)
+}
+
+// claimAll claims every due pending job of the fixture kind, so a case can move rows out of the
+// pending state.
+func claimAll(ctx context.Context, t *testing.T, limit int) {
+	t.Helper()
+
+	claimed, err := dao.NewJobClaim().Exec(ctx, &dao.JobClaimRequest{
+		Kinds: []string{"generate"}, WorkerID: fixtureWorkerID, Limit: limit, LeaseSeconds: 60,
+	})
+	require.NoError(t, err)
+	require.Len(t, claimed, limit)
+}
+
 func TestJobQueueDepth(t *testing.T) {
 	t.Parallel()
 
-	t.Run("CountsDuePending", func(t *testing.T) {
-		t.Parallel()
+	testCases := []struct {
+		name string
 
-		postgres.RunDBTest(t, configtest.PostgresPreset, migrations.Migrations, func(ctx context.Context, t *testing.T) {
-			t.Helper()
+		// seed sets up the queue state for the case, inside the test's own database.
+		seed func(ctx context.Context, t *testing.T)
 
-			// Four due-now pending jobs; claim the oldest so it is no longer pending. A fifth pushed into
-			// the future is pending but not due. The probe counts the three that remain due-and-unclaimed
-			// and none of the others.
-			for i := range 4 {
-				enqueueJob(ctx, t, seedID(i), 1)
-			}
+		expectPending int64
+		// expectAge is whether an oldest-pending age is reported: present exactly when something is
+		// pending, absent (nil) otherwise.
+		expectAge bool
+	}{
+		{
+			// Four due-now pending; the oldest is claimed away, and a fifth is scheduled for the future.
+			// Three remain due-and-unclaimed — the only ones that count.
+			name: "Backlog",
 
-			claimed, err := dao.NewJobClaim().Exec(ctx, &dao.JobClaimRequest{
-				Kinds: []string{"generate"}, WorkerID: fixtureWorkerID, Limit: 1, LeaseSeconds: 60,
+			seed: func(ctx context.Context, t *testing.T) {
+				t.Helper()
+
+				for i := range 4 {
+					enqueueJob(ctx, t, seedID(i), 1)
+				}
+
+				claimAll(ctx, t, 1)
+				scheduleFuture(ctx, t, seedID(9))
+			},
+
+			expectPending: 3,
+			expectAge:     true,
+		},
+		{
+			name: "Empty",
+
+			seed: func(_ context.Context, t *testing.T) { t.Helper() },
+
+			expectPending: 0,
+			expectAge:     false,
+		},
+		{
+			// A claimed job is not pending, so nothing is due.
+			name: "OnlyClaimed",
+
+			seed: func(ctx context.Context, t *testing.T) {
+				t.Helper()
+
+				enqueueJob(ctx, t, seedID(0), 1)
+				claimAll(ctx, t, 1)
+			},
+
+			expectPending: 0,
+			expectAge:     false,
+		},
+		{
+			// A pending job scheduled for the future is not yet backlog.
+			name: "OnlyFutureScheduled",
+
+			seed: func(ctx context.Context, t *testing.T) {
+				t.Helper()
+
+				enqueueJob(ctx, t, seedID(0), 1)
+				scheduleFuture(ctx, t, seedID(0))
+			},
+
+			expectPending: 0,
+			expectAge:     false,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			postgres.RunDBTest(t, configtest.PostgresPreset, migrations.Migrations, func(ctx context.Context, t *testing.T) {
+				t.Helper()
+
+				testCase.seed(ctx, t)
+
+				depth, err := dao.NewJobQueueDepth().Exec(ctx)
+				require.NoError(t, err)
+				require.Equal(t, testCase.expectPending, depth.Pending)
+
+				if testCase.expectAge {
+					require.NotNil(t, depth.OldestPendingAge)
+					require.GreaterOrEqual(t, *depth.OldestPendingAge, time.Duration(0))
+				} else {
+					require.Nil(t, depth.OldestPendingAge)
+				}
 			})
-			require.NoError(t, err)
-			require.Len(t, claimed, 1)
-
-			futureID := seedID(9)
-			enqueueJob(ctx, t, futureID, 1)
-
-			pg, err := postgres.GetContext(ctx)
-			require.NoError(t, err)
-
-			_, err = pg.NewRaw(
-				"UPDATE jobs SET run_at = clock_timestamp() + interval '1 hour' WHERE id = ?",
-				uuid.MustParse(futureID),
-			).Exec(ctx)
-			require.NoError(t, err)
-
-			depth, err := dao.NewJobQueueDepth().Exec(ctx)
-			require.NoError(t, err)
-			require.Equal(t, int64(3), depth.Pending)
-			require.NotNil(t, depth.OldestPendingAge)
-			require.GreaterOrEqual(t, *depth.OldestPendingAge, time.Duration(0))
 		})
-	})
+	}
 
-	t.Run("EmptyQueue", func(t *testing.T) {
-		t.Parallel()
-
-		postgres.RunDBTest(t, configtest.PostgresPreset, migrations.Migrations, func(ctx context.Context, t *testing.T) {
-			t.Helper()
-
-			// No pending rows: a zero count and an absent age, not a zero one.
-			depth, err := dao.NewJobQueueDepth().Exec(ctx)
-			require.NoError(t, err)
-			require.Zero(t, depth.Pending)
-			require.Nil(t, depth.OldestPendingAge)
-		})
-	})
-
+	// The plan assertion checks the query plan rather than a count, so it stays its own test rather
+	// than a row in the table above.
 	t.Run("UsesDispatchIndex", func(t *testing.T) {
 		t.Parallel()
 
