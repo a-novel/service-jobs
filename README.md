@@ -12,7 +12,6 @@ Durable asynchronous work for the platform: a queue that records a unit of work,
 ![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/a-novel/service-jobs)
 
 ![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/a-novel/service-jobs/main.yaml)
-[![Go Report Card](https://goreportcard.com/badge/github.com/a-novel/service-jobs)](https://goreportcard.com/report/github.com/a-novel/service-jobs)
 [![codecov](https://codecov.io/gh/a-novel/service-jobs/graph/badge.svg)](https://codecov.io/gh/a-novel/service-jobs)
 
 ![Coverage graph](https://codecov.io/gh/a-novel/service-jobs/graphs/sunburst.svg)
