@@ -8,8 +8,8 @@ import (
 	"github.com/uptrace/bun"
 )
 
-// JobStatus is where a job sits in its lifecycle. The database holds it as text with a CHECK list
-// rather than an enum, so adding a value stays a plain migration.
+// JobStatus is where a job sits in its lifecycle. It maps to the job_status database enum, so the
+// two definitions have to move together: a value added here needs a matching migration on the type.
 type JobStatus string
 
 const (
@@ -35,14 +35,12 @@ const (
 // the status is claimed, and the settled and expiry timestamps are set exactly when the status is
 // terminal. A partial write that satisfies one and not the other is rejected.
 type Job struct {
-	bun.BaseModel `bun:"table:jobs,alias:jobs"`
+	bun.BaseModel `bun:"table:jobs"`
 
 	ID uuid.UUID `bun:"id,pk,type:uuid"`
 	// Kind selects the handler that runs this job. Never empty.
 	Kind string `bun:"kind"`
-	// Payload is the caller-supplied input, opaque to the queue. A handler reads its owner from
-	// OwnerID and never from here: the payload is caller-supplied, so an owner sourced from it would
-	// let a caller attribute their job's side effects to someone else.
+	// Payload is the caller-supplied input, opaque to the queue.
 	Payload json.RawMessage `bun:"payload,type:jsonb"`
 
 	// OwnerID is the user the job acts on behalf of, supplied by the calling service, which verified
@@ -60,7 +58,8 @@ type Job struct {
 
 	// Attempt counts runs already started.
 	Attempt int16 `bun:"attempt"`
-	// MaxAttempts caps them. One by default, which is the right floor for a priced call.
+	// MaxAttempts caps the value Attempt may reach. One by default, which is the right floor for a
+	// priced call.
 	MaxAttempts int16 `bun:"max_attempts"`
 
 	// RunAt is the earliest time a worker may claim this job.
