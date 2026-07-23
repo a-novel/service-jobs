@@ -1,5 +1,8 @@
--- Lease-driven recovery: every job whose claim has lapsed, in one sweep. The predicate matches
--- jobs_lease_idx, so the scan does not grow with the settled rows around it.
+-- Lease-driven recovery: every job whose claim has lapsed, in one sweep. The reapable set is
+-- selected FOR UPDATE SKIP LOCKED, so when several replicas run the reaper at once each takes a
+-- disjoint set and none blocks on another's locks — the same contention SKIP LOCKED avoids on the
+-- claim path. The predicate matches jobs_lease_idx, so the scan does not grow with the settled rows
+-- around it.
 --
 -- The fate of each reaped job turns on whether an attempt remains. attempt was incremented at claim,
 -- so a job at its cap has already used every run it was granted: it settles abandoned, stamping
@@ -7,6 +10,18 @@
 -- pending, immediately claimable, with settled_at and expires_at left null. The CASE expressions
 -- keep both branches inside the jobs_terminal_fields constraint, which ties those two timestamps to
 -- a terminal status.
+WITH
+  reapable AS (
+    SELECT
+      id
+    FROM
+      jobs
+    WHERE
+      status = 'claimed'
+      AND lease_expires_at < clock_timestamp()
+    FOR UPDATE
+      SKIP LOCKED
+  )
 UPDATE jobs
 SET
   status = CASE
@@ -32,8 +47,9 @@ SET
     ELSE ?0
   END,
   updated_at = clock_timestamp()
+FROM
+  reapable
 WHERE
-  status = 'claimed'
-  AND lease_expires_at < clock_timestamp()
+  jobs.id = reapable.id
 RETURNING
-  *;
+  jobs.*;
