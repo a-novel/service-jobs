@@ -39,6 +39,10 @@ const (
 	// the stack pushes a change, so the stream learns of one by polling; the interval bounds the
 	// detection delay a watching caller sees.
 	jobWatchPollInterval = time.Second
+	// statusQueueCacheTTL is how long the status surface caches the backlog measurement. It bounds how
+	// stale the reported depth can be while stopping a polled health probe from running the query on
+	// every call.
+	statusQueueCacheTTL = time.Second
 )
 
 func main() {
@@ -76,6 +80,7 @@ func main() {
 	daoJobSettle := dao.NewJobSettle()
 	daoJobRequeue := dao.NewJobRequeue()
 	daoJobReap := dao.NewJobReap()
+	daoJobQueueDepth := dao.NewJobQueueDepth()
 
 	// =================================================================================================================
 	// SERVICES
@@ -90,6 +95,7 @@ func main() {
 	serviceJobClaim := core.NewJobClaim(daoJobClaim)
 	serviceJobSettle := core.NewJobSettle(daoJobSettle, daoJobRequeue, daoJobGetByID, transactor, jobRetentionDays)
 	serviceJobReap := core.NewJobReap(daoJobReap, jobRetentionDays)
+	serviceJobQueueDepth := core.NewJobQueueDepth(daoJobQueueDepth)
 
 	// =================================================================================================================
 	// REAPER
@@ -103,7 +109,7 @@ func main() {
 	// HANDLERS
 	// =================================================================================================================
 
-	handlerStatus := handlers.NewGrpcStatus()
+	handlerStatus := handlers.NewGrpcStatus(serviceJobQueueDepth, statusQueueCacheTTL)
 	handlerJobEnqueue := handlers.NewJobEnqueue(serviceJobEnqueue)
 	handlerJobGet := handlers.NewJobGet(serviceJobGet)
 	handlerJobClaim := handlers.NewJobClaim(serviceJobClaim)

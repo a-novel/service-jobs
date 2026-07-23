@@ -16,6 +16,9 @@ import (
 type (
 	StatusRequest  = protogen.StatusRequest
 	StatusResponse = protogen.StatusResponse
+	// QueueDepth is the backlog carried on StatusResponse.Queue: the pending count and the
+	// oldest-pending age.
+	QueueDepth = protogen.QueueDepth
 
 	JobEnqueueRequest  = protogen.JobEnqueueRequest
 	JobEnqueueResponse = protogen.JobEnqueueResponse
