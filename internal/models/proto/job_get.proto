@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+import "job.proto";
+
+// JobGetService reads one of an owner's jobs by its id. A job owned by anyone else reports not-found,
+// so the read cannot be used to learn whether a job id exists.
+service JobGetService {
+  rpc JobGet(JobGetRequest) returns (JobGetResponse);
+}
+
+// JobGetRequest identifies the job to read and the owner it must belong to.
+message JobGetRequest {
+  // ID of the job to read, formatted as a UUID.
+  string id = 1;
+  // OwnerID scopes the read, formatted as a UUID. A job owned by anyone else reports not-found.
+  string owner_id = 2;
+}
+
+// JobGetResponse returns the job.
+message JobGetResponse {
+  Job job = 1;
+}

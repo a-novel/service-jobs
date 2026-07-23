@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+import "job.proto";
+
+// JobEnqueueService records a unit of asynchronous work, deduplicating on the idempotency key.
+service JobEnqueueService {
+  rpc JobEnqueue(JobEnqueueRequest) returns (JobEnqueueResponse);
+}
+
+// JobEnqueueRequest carries a new job. The server mints the id and the timestamps.
+message JobEnqueueRequest {
+  // Kind names the handler that will run the job. Required.
+  string kind = 1;
+  // Payload is the handler's opaque input, as JSON bytes.
+  bytes payload = 2;
+  // OwnerID is the user the job acts for, formatted as a UUID. Supplied by the calling service.
+  string owner_id = 3;
+  // IdempotencyKey deduplicates repeat submissions within one owner and kind. Unset skips
+  // deduplication; a value reused with a different payload is a conflict, not a replay.
+  optional string idempotency_key = 4;
+  // MaxAttempts caps the runs the job gets. Zero means one, the right floor for a priced call.
+  int32 max_attempts = 5;
+}
+
+// JobEnqueueResponse returns the recorded job and whether this call created it.
+message JobEnqueueResponse {
+  // Job is the recorded job — the newly created one, or the existing one on an idempotent replay.
+  Job job = 1;
+  // Created is false when an existing job was returned under the same idempotency key, so a caller
+  // retrying a request attaches to the work already in flight instead of paying for a second one.
+  bool created = 2;
+}

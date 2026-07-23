@@ -1,5 +1,5 @@
 // Command migrations applies the service's database schema migrations and exits.
-// The cmd/grpc entrypoint serves the service's gRPC API once the schema is in
+// The cmd/grpc entrypoint serves the jobs queue once the schema is in
 // place.
 package main
 

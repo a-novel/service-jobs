@@ -24,9 +24,7 @@ The queue knows nothing about what the work _is_. A job carries a **kind** — a
 
 Two guarantees shape everything here. A job carries an **idempotency key** with no expiry, so a client retrying a request it never saw the answer to attaches to the work already in flight instead of starting a second one. And a job whose worker died is **recovered rather than lost**: its lease expires, a sweep returns it to the queue, and its recorded provider call lets a resumed run re-attach to work a third party already started rather than paying for it twice.
 
-The surface is **gRPC only**. Callers are other services on the internal network, so there is no browser client and no REST API to keep in step with the contract.
-
-> **The queue is not implemented yet.** The repository currently carries the template's placeholder `item` resource, which exercises every layer end to end while the real schema and RPCs are built. It will be replaced, not extended.
+The surface is **gRPC only**. Callers are other services on the internal network, so there is no browser client and no REST API to keep in step with the contract. It exposes five RPCs — enqueue a job, read one, claim a batch, settle an outcome, and watch a job's state on a stream until it is terminal.
 
 ## Deploying
 
@@ -155,9 +153,22 @@ func main() {
 	}
 	defer client.Close()
 
-	if _, err := client.Status(ctx, &servicejobs.StatusRequest{}); err != nil {
+	requestKey := "a-request-key" // unique per submission; a retry reuses it
+
+	// Enqueue a job. The idempotency key makes a retry of this call attach to the same
+	// job rather than start a second one; created is false when that happens.
+	resp, err := client.JobEnqueue(ctx, &servicejobs.JobEnqueueRequest{
+		Kind:           "generate",
+		Payload:        []byte(`{"seed":"an idea"}`),
+		OwnerId:        "00000000-0000-0000-0000-000000000001", // the end user this job acts for
+		IdempotencyKey: &requestKey,
+		MaxAttempts:    1,
+	})
+	if err != nil {
 		log.Fatal(err)
 	}
+
+	log.Printf("job %s created=%t", resp.GetJob().GetId(), resp.GetCreated())
 }
 ```
 

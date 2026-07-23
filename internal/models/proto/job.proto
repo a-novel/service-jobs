@@ -1,0 +1,54 @@
+syntax = "proto3";
+
+// A Job is one unit of asynchronous work as the queue exposes it. The queue never interprets its
+// payload, result or error — they are opaque JSON bytes the owning service reads.
+message Job {
+  // Unique identifier, formatted as a UUID.
+  string id = 1;
+  // Kind names the handler that runs the job. Opaque to the queue.
+  string kind = 2;
+  // Payload is the caller-supplied input, as JSON bytes.
+  bytes payload = 3;
+  // OwnerID is the user the job acts for, formatted as a UUID.
+  string owner_id = 4;
+  // Status is where the job sits in its lifecycle.
+  JobStatus status = 5;
+  // Attempt counts runs already begun.
+  int32 attempt = 6;
+  // MaxAttempts caps the value Attempt may reach.
+  int32 max_attempts = 7;
+  // Result is the handler's output on success, as JSON bytes. Empty until the job succeeds.
+  bytes result = 8;
+  // Error is the structured failure on a terminal failure, as JSON bytes. Empty otherwise.
+  bytes error = 9;
+  // ProviderCallID is a third party's identifier for the operation this job started. Empty until a
+  // provider call records one.
+  string provider_call_id = 10;
+  // Creation timestamp, formatted as RFC 3339.
+  string created_at = 11;
+  // Timestamp of the most recent update, formatted as RFC 3339.
+  string updated_at = 12;
+  // Timestamp the job reached a terminal status, formatted as RFC 3339. Empty until it settles.
+  string settled_at = 13;
+  // Timestamp the settled job may be purged, formatted as RFC 3339. Empty until it settles.
+  string expires_at = 14;
+}
+
+// JobStatus is where a job sits in its lifecycle.
+enum JobStatus {
+  // JOB_STATUS_UNSPECIFIED means the status was not set. It is never a value the queue stores.
+  JOB_STATUS_UNSPECIFIED = 0;
+  // JOB_STATUS_PENDING means the job is waiting to be claimed.
+  JOB_STATUS_PENDING = 1;
+  // JOB_STATUS_CLAIMED means a worker holds a lease on the job and is running it.
+  JOB_STATUS_CLAIMED = 2;
+  // JOB_STATUS_SUCCEEDED means the job's handler returned a result.
+  JOB_STATUS_SUCCEEDED = 3;
+  // JOB_STATUS_FAILED means the job's handler failed with no attempt left to retry.
+  JOB_STATUS_FAILED = 4;
+  // JOB_STATUS_ABANDONED means the reaper settled the job because its lease expired with no attempt
+  // remaining — the worker running it died mid-run.
+  JOB_STATUS_ABANDONED = 5;
+  // JOB_STATUS_CANCELLED means the job was settled on the owner's request rather than by running it.
+  JOB_STATUS_CANCELLED = 6;
+}
