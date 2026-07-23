@@ -1,6 +1,5 @@
-// Command grpc serves the item API over gRPC. It is one of the service's
-// entrypoints; cmd/rest serves the same domain over HTTP and cmd/migrations
-// applies the database schema.
+// Command grpc serves the service's gRPC API. It is the service's request-facing entrypoint;
+// cmd/migrations applies the database schema.
 package main
 
 import (
@@ -24,8 +23,6 @@ import (
 
 	"github.com/a-novel/service-jobs/internal/config"
 	"github.com/a-novel/service-jobs/internal/config/env"
-	"github.com/a-novel/service-jobs/internal/core"
-	"github.com/a-novel/service-jobs/internal/dao"
 	"github.com/a-novel/service-jobs/internal/handlers"
 	"github.com/a-novel/service-jobs/internal/handlers/protogen"
 )
@@ -46,35 +43,10 @@ func main() {
 	ctx = lo.Must(postgres.NewContext(ctx, config.PostgresPresetDefault))
 
 	// =================================================================================================================
-	// DAO
-	// =================================================================================================================
-
-	daoItemCreate := dao.NewItemCreate()
-	daoItemGet := dao.NewItemGet()
-	daoItemList := dao.NewItemList()
-	daoItemUpdate := dao.NewItemUpdate()
-	daoItemDelete := dao.NewItemDelete()
-
-	// =================================================================================================================
-	// SERVICES
-	// =================================================================================================================
-
-	serviceItemCreate := core.NewItemCreate(daoItemCreate)
-	serviceItemGet := core.NewItemGet(daoItemGet)
-	serviceItemList := core.NewItemList(daoItemList)
-	serviceItemUpdate := core.NewItemUpdate(daoItemUpdate)
-	serviceItemDelete := core.NewItemDelete(daoItemDelete)
-
-	// =================================================================================================================
 	// HANDLERS
 	// =================================================================================================================
 
 	handlerStatus := handlers.NewGrpcStatus()
-	handlerItemCreate := handlers.NewItemCreate(serviceItemCreate)
-	handlerItemGet := handlers.NewItemGet(serviceItemGet)
-	handlerItemList := handlers.NewItemList(serviceItemList)
-	handlerItemUpdate := handlers.NewItemUpdate(serviceItemUpdate)
-	handlerItemDelete := handlers.NewItemDelete(serviceItemDelete)
 
 	// =================================================================================================================
 	// SERVER
@@ -104,11 +76,6 @@ func main() {
 	grpcf.SetEchoServersContext(ctx, server, cfg.Grpc.Ping)
 
 	protogen.RegisterStatusServiceServer(server, handlerStatus)
-	protogen.RegisterItemCreateServiceServer(server, handlerItemCreate)
-	protogen.RegisterItemGetServiceServer(server, handlerItemGet)
-	protogen.RegisterItemListServiceServer(server, handlerItemList)
-	protogen.RegisterItemUpdateServiceServer(server, handlerItemUpdate)
-	protogen.RegisterItemDeleteServiceServer(server, handlerItemDelete)
 
 	reflection.Register(server)
 
