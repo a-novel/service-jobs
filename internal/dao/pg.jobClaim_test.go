@@ -3,6 +3,7 @@ package dao_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sync"
 	"testing"
 
@@ -161,6 +162,129 @@ func TestJobClaim(t *testing.T) {
 				_, dup := seen[job.ID]
 				require.False(t, dup, "job %s claimed by both workers", job.ID)
 				seen[job.ID] = struct{}{}
+			}
+		})
+	})
+
+	t.Run("EmptyKindsClaimsNothing", func(t *testing.T) {
+		t.Parallel()
+
+		postgres.RunDBTest(t, configtest.PostgresPreset, migrations.Migrations, func(ctx context.Context, t *testing.T) {
+			t.Helper()
+
+			enqueue := dao.NewJobEnqueue()
+			seed(ctx, t, enqueue, "00000000-0000-0000-0000-000000000001", "generate")
+
+			// A worker that serves no kinds claims nothing — fail-safe rather than fail-open. A worker
+			// misconfigured with an empty kind set sits idle, visible in the queue depth, instead of
+			// claiming work it has no handler for and burning the attempt failing it.
+			claimed, err := dao.NewJobClaim().Exec(ctx, &dao.JobClaimRequest{
+				Kinds: []string{}, WorkerID: "worker-a", Limit: 10, LeaseSeconds: 60,
+			})
+			require.NoError(t, err)
+			require.Empty(t, claimed)
+		})
+	})
+
+	// Stress the claim path under real contention: many workers draining one queue at once. The
+	// point is not throughput but correctness — SKIP LOCKED must hand every job to exactly one
+	// worker and never deadlock, which a single-threaded test cannot exercise. Run it under -race to
+	// catch a data race in the path as well.
+	t.Run("StressConcurrentDrain", func(t *testing.T) {
+		t.Parallel()
+
+		postgres.RunDBTest(t, configtest.PostgresPreset, migrations.Migrations, func(ctx context.Context, t *testing.T) {
+			t.Helper()
+
+			const (
+				jobCount = 60
+				workers  = 8
+			)
+
+			enqueue := dao.NewJobEnqueue()
+
+			for i := range jobCount {
+				id := uuid.New()
+				_, err := enqueue.Exec(ctx, &dao.JobEnqueueRequest{
+					ID:                 id,
+					Kind:               "generate",
+					Payload:            json.RawMessage(`{}`),
+					OwnerID:            uuid.MustParse("00000000-0000-0000-0000-00000000a11c"),
+					IdempotencyKey:     lo.ToPtr(id.String()),
+					RequestFingerprint: []byte{byte(i)},
+					MaxAttempts:        1,
+				})
+				require.NoError(t, err)
+			}
+
+			claim := dao.NewJobClaim()
+			settle := dao.NewJobSettle()
+
+			var (
+				mu      sync.Mutex
+				settled = map[uuid.UUID]int{} // id -> how many times it was settled
+				errs    []error               // failures collected off the worker goroutines
+				wg      sync.WaitGroup
+			)
+
+			// record is the only thing the workers write through, so require lives on the test
+			// goroutine alone — a require.FailNow inside a goroutine would leak a runtime.Goexit and
+			// could hang the run rather than fail it.
+			record := func(id uuid.UUID, err error) {
+				mu.Lock()
+				defer mu.Unlock()
+
+				if err != nil {
+					errs = append(errs, err)
+
+					return
+				}
+
+				settled[id]++
+			}
+
+			for w := range workers {
+				wg.Add(1)
+
+				go func(workerID string) {
+					defer wg.Done()
+
+					// Each worker claims and settles in a loop until the queue is drained. The
+					// iteration cap is a deadlock backstop: a correct run needs far fewer, but a
+					// livelock should fail the test rather than hang it.
+					for range jobCount * 2 {
+						batch, err := claim.Exec(ctx, &dao.JobClaimRequest{
+							Kinds: []string{"generate"}, WorkerID: workerID, Limit: 3, LeaseSeconds: 60,
+						})
+						if err != nil {
+							record(uuid.Nil, err)
+
+							return
+						}
+
+						if len(batch) == 0 {
+							return
+						}
+
+						for _, job := range batch {
+							_, err := settle.Exec(ctx, &dao.JobSettleRequest{
+								ID: job.ID, WorkerID: workerID, Status: dao.JobStatusSucceeded, RetentionDays: 7,
+							})
+							record(job.ID, err)
+						}
+					}
+				}(fmt.Sprintf("worker-%d", w))
+			}
+
+			wg.Wait()
+
+			require.Empty(t, errs)
+
+			// Every job was settled exactly once: none dropped, none processed twice.
+			require.Len(t, settled, jobCount)
+
+			for id, count := range settled {
+				require.Equalf(t, 1, count, "job %s settled %d times", id, count)
 			}
 		})
 	})
