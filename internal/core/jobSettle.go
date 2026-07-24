@@ -8,7 +8,6 @@ import (
 
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/trace"
 
 	"github.com/a-novel-kit/golib/otel"
 	"github.com/a-novel-kit/golib/transaction"
@@ -106,21 +105,24 @@ func (service *JobSettle) Exec(ctx context.Context, request *JobSettleRequest) (
 	// Success, and failure with no retry, are single terminal writes. The DAO's own claim guard
 	// rejects a stale settle, so neither needs the transaction the retry path does.
 	if request.Failure == nil {
-		return service.settle(ctx, span, request, dao.JobStatusSucceeded, request.Result, nil)
+		return service.settle(ctx, request, dao.JobStatusSucceeded, request.Result, nil)
 	}
 
 	if !request.Failure.Retryable {
-		return service.settle(ctx, span, request, dao.JobStatusFailed, nil, request.Failure.Error)
+		return service.settle(ctx, request, dao.JobStatusFailed, nil, request.Failure.Error)
 	}
 
-	return service.retry(ctx, span, request)
+	return service.retry(ctx, request)
 }
 
 // settle performs one terminal transition and maps the not-claimed sentinel.
 func (service *JobSettle) settle(
-	ctx context.Context, span trace.Span, request *JobSettleRequest,
+	ctx context.Context, request *JobSettleRequest,
 	status dao.JobStatus, result, jobErr json.RawMessage,
 ) (*Job, error) {
+	ctx, span := otel.Tracer().Start(ctx, "core.JobSettle(settle)")
+	defer span.End()
+
 	entity, err := service.settleDao.Exec(ctx, &dao.JobSettleRequest{
 		ID:            request.ID,
 		WorkerID:      request.WorkerID,
@@ -143,7 +145,10 @@ func (service *JobSettle) settle(
 // retry decides a retryable failure: requeue while an attempt remains, give up when none does. The
 // read and the write are one transaction, so the reaper cannot recover the job in between and turn
 // the decision stale under it.
-func (service *JobSettle) retry(ctx context.Context, span trace.Span, request *JobSettleRequest) (*Job, error) {
+func (service *JobSettle) retry(ctx context.Context, request *JobSettleRequest) (*Job, error) {
+	ctx, span := otel.Tracer().Start(ctx, "core.JobSettle(retry)")
+	defer span.End()
+
 	var result *Job
 
 	err := service.transactor.WithinTx(ctx, func(ctx context.Context) error {

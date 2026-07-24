@@ -5,6 +5,8 @@ import (
 	"log"
 	"time"
 
+	"github.com/a-novel-kit/golib/otel"
+
 	"github.com/a-novel/service-jobs/internal/core"
 )
 
@@ -37,6 +39,9 @@ func NewReaper(service JobReapService, interval time.Duration) *Reaper {
 // never leaves one half-applied; at worst an in-flight sweep rolls back and the next boot recovers
 // the same jobs.
 func (reaper *Reaper) Run(ctx context.Context) {
+	ctx, span := otel.Tracer().Start(ctx, "lib.Reaper.Run")
+	defer span.End()
+
 	reaper.sweep(ctx)
 
 	ticker := time.NewTicker(reaper.interval)
@@ -56,6 +61,9 @@ func (reaper *Reaper) Run(ctx context.Context) {
 // tick; it is exported so a caller can drive one deterministic pass — which is how the loop's effect
 // is asserted without waiting on the ticker.
 func (reaper *Reaper) Sweep(ctx context.Context) (int, error) {
+	ctx, span := otel.Tracer().Start(ctx, "lib.Reaper.Sweep")
+	defer span.End()
+
 	jobs, err := reaper.service.Exec(ctx)
 	if err != nil {
 		return 0, err
@@ -68,6 +76,9 @@ func (reaper *Reaper) Sweep(ctx context.Context) (int, error) {
 // the loop lives on to try again, because a queue that stops recovering work on one transient
 // database error is worse than one that retries next tick.
 func (reaper *Reaper) sweep(ctx context.Context) {
+	ctx, span := otel.Tracer().Start(ctx, "lib.Reaper.sweep")
+	defer span.End()
+
 	recovered, err := reaper.Sweep(ctx)
 	switch {
 	case err != nil:
