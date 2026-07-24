@@ -99,6 +99,11 @@ func (handler *GrpcStatus) reportPostgres(ctx context.Context) error {
 // reportQueueDepth returns the backlog, cached for cacheTTL. It returns nil when the measurement is
 // unavailable — the database is unreachable, which reportPostgres reports as down, so the response
 // carries no backlog rather than a misleading zero.
+//
+// The cache fields are written after construction, which agora-no-receiver-mutation forbids because
+// these types are shared unsynchronised. Here they are not: mu guards every read and every write.
+//
+// nosemgrep: agora-no-receiver-mutation
 func (handler *GrpcStatus) reportQueueDepth(ctx context.Context) *protogen.QueueDepth {
 	ctx, span := otel.Tracer().Start(ctx, "grpc.Status(reportQueueDepth)")
 	defer span.End()
