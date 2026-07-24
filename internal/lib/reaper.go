@@ -41,6 +41,7 @@ func NewReaper(service JobReapService, interval time.Duration) *Reaper {
 func (reaper *Reaper) Run(ctx context.Context) {
 	ctx, span := otel.Tracer().Start(ctx, "lib.Reaper.Run")
 	defer span.End()
+
 	reaper.sweep(ctx)
 
 	ticker := time.NewTicker(reaper.interval)
@@ -62,6 +63,7 @@ func (reaper *Reaper) Run(ctx context.Context) {
 func (reaper *Reaper) Sweep(ctx context.Context) (int, error) {
 	ctx, span := otel.Tracer().Start(ctx, "lib.Reaper.Sweep")
 	defer span.End()
+
 	jobs, err := reaper.service.Exec(ctx)
 	if err != nil {
 		return 0, err
@@ -76,6 +78,7 @@ func (reaper *Reaper) Sweep(ctx context.Context) (int, error) {
 func (reaper *Reaper) sweep(ctx context.Context) {
 	ctx, span := otel.Tracer().Start(ctx, "lib.Reaper.sweep")
 	defer span.End()
+
 	recovered, err := reaper.Sweep(ctx)
 	switch {
 	case err != nil:
